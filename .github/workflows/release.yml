@@ -58,7 +58,7 @@ jobs:
             --workpath build\work `
             --specpath build `
             main.py `
-            --add-data "assets;assets" `
+            --add-data "$pwd\assets;assets" `
             --collect-all psutil `
             --collect-all tkinter `
             --hidden-import pystray `
