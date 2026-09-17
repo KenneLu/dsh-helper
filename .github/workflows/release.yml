@@ -66,6 +66,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
           New-Item -ItemType Directory -Force -Path release | Out-Null
           Move-Item "build\dist_tmp\$pkg" "release\$pkg"
+          # B3 规则：exe 不带版本号（自启注册表存完整路径，版本进 zip/目录名）
+          if (Test-Path "release\$pkg\$pkg.exe") { Move-Item "release\$pkg\$pkg.exe" "release\$pkg\dsh-helper.exe" }
           if (-not (Test-Path "release\$pkg\dsh-helper.exe")) { throw "build produced no exe" }
           Copy-Item README.md "release\$pkg\README.md"
 
