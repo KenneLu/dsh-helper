@@ -1,0 +1,13 @@
+# 构建产物
+build/
+dist/
+out/
+release/
+__pycache__/
+*.pyc
+*.spec
+
+# 运行产物（数据区在 %LOCALAPPDATA%\dsh-helper\，这些是历史遗留/本地调试）
+log/
+smoke.log
+config.json

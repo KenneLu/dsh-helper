@@ -1,0 +1,28 @@
+# Changelog
+
+All notable changes to dsh-helper are documented here.
+The tagging convention matches the versions in this file.
+
+## 1.7.0
+
+- Online update: "检查 dsh-helper 更新 / 下载并更新 dsh-helper" tray items backed
+  by GitHub Releases (startup auto-check + 24h throttle, zip + sha256 verified,
+  applied after tray quit via a one-shot robocopy script that restarts the exe).
+- User data moved to `%LOCALAPPDATA%\dsh-helper\` (config.json + log\); the old
+  exe-side config.json is migrated once on first run. The exe directory can now
+  be replaced wholesale by the updater.
+- Rotating log (1 MB × 3 backups, ~4 MB ceiling) instead of an unbounded file.
+- Panel URL in the tray menu now masks the token (`token=••••••`); "复制面板地址"
+  sits directly under the URL line and copies the full URL - the only way to get
+  the token.
+- Tray menu restructured to the house standard (read-only info header, updates,
+  default entry = open panel, service control, business, open, preferences,
+  quit last).
+- Repository baseline: git/CI (tests + tag-triggered release), LICENSE,
+  CHANGELOG, .gitignore; version now follows semver (single source in main.py).
+
+## 1.6
+
+- Initial public state: tray management for `dsh web` (start/stop/restart,
+  panel, URL copy, status refresh), single-instance mutex, autostart with
+  command-line match display, timestamped PyInstaller packages.

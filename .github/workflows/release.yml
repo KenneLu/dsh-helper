@@ -1,0 +1,101 @@
+name: release
+
+# Tag a commit (v<semver>) and this builds the Windows package and publishes
+# it as a GitHub Release. The zip layout (a top-level dsh-helper-<ver>/ folder
+# plus a .sha256) is what update_helper.py expects when applying updates.
+
+run-name: ${{ startsWith(github.ref, 'refs/tags/v') && format('release {0}', github.ref_name) || 'build only (no release)' }}
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install psutil pystray pillow pyinstaller
+
+      - name: Read version from main.py
+        id: version
+        shell: pwsh
+        run: |
+          $line = Select-String -Path main.py -Pattern '^VERSION = ' | Select-Object -First 1
+          if (-not $line) { throw "VERSION not found in main.py" }
+          $version = ($line.Line -split '"')[1]
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "package=dsh-helper-$version" >> $env:GITHUB_OUTPUT
+          Write-Host "version=$version"
+
+      - name: Compile gate
+        run: python -m py_compile main.py update_helper.py
+
+      # CI 上没有 dsh.cmd，--smoke 门禁只在本机 build.bat 里跑；
+      # 这里用"能构建 + exe 存在"作为最低门禁。
+      - name: Build (PyInstaller onedir, noconsole)
+        shell: pwsh
+        run: |
+          $pkg = "${{ steps.version.outputs.package }}"
+          python -m PyInstaller --noconfirm --clean --onedir --noconsole `
+            --name $pkg `
+            --distpath build\dist_tmp `
+            --workpath build\work `
+            --specpath build `
+            main.py `
+            --add-data "assets;assets" `
+            --collect-all psutil `
+            --collect-all tkinter `
+            --hidden-import pystray `
+            --hidden-import PIL.ImageDraw
+          if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          Move-Item "build\dist_tmp\$pkg" "release\$pkg"
+          if (-not (Test-Path "release\$pkg\dsh-helper.exe")) { throw "build produced no exe" }
+          Copy-Item README.md "release\$pkg\README.md"
+
+      - name: Package zip
+        shell: pwsh
+        run: |
+          $pkg = "${{ steps.version.outputs.package }}"
+          Compress-Archive -Path "release/$pkg" -DestinationPath "release/$pkg-windows-x64.zip"
+          Get-FileHash "release/$pkg-windows-x64.zip" -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  $pkg-windows-x64.zip" } |
+            Set-Content "release/$pkg-windows-x64.zip.sha256"
+          Get-ChildItem release | Format-Table Name, Length
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.version.outputs.package }}-windows-x64
+          path: |
+            release/*.zip
+            release/*.sha256
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $pkg = "${{ steps.version.outputs.package }}"
+          $notes = "Windows package: unpack and run ``dsh-helper.exe``. In-app updates pick this zip up directly. See README.md for usage."
+          gh release create $tag "release/$pkg-windows-x64.zip" "release/$pkg-windows-x64.zip.sha256" `
+            --title "$pkg" --notes $notes
