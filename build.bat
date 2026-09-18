@@ -77,13 +77,24 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo [BUILD] icon ...
+"%PY%" src\icons.py
+if errorlevel 1 (
+  echo [ERROR] icon generation failed.
+  if not defined NOPAUSE pause
+  exit /b 1
+)
+
 echo [BUILD] PyInstaller onedir noconsole ...
 "%PY%" -m PyInstaller --noconfirm --clean --onedir --noconsole ^
   --name %APPNAME% ^
+  --icon "%~dp0%APPNAME%-taskbar.ico" ^
   --distpath build\dist_tmp ^
   --workpath build\work ^
   --specpath build ^
   src\main.py ^
+  --add-data "%~dp0%APPNAME%.ico;." ^
+  --add-data "%~dp0%APPNAME%-taskbar.ico;." ^
   --add-data "%~dp0resources;resources" ^
   --collect-all psutil ^
   --collect-all tkinter ^
@@ -117,6 +128,11 @@ if not exist "%FROZEN_EXE%" (
 )
 if not exist "%RELEASE_DIR%\_internal\base_library.zip" (
   echo [ERROR] _internal has no runtime - the package is incomplete.
+  if not defined NOPAUSE pause
+  exit /b 1
+)
+if not exist "%RELEASE_DIR%\_internal\%APPNAME%-taskbar.ico" (
+  echo [ERROR] taskbar icon asset missing from the release.
   if not defined NOPAUSE pause
   exit /b 1
 )
