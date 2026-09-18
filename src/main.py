@@ -91,6 +91,8 @@ DEFAULT_CONFIG = {
     "status_refresh_interval_sec": DEFAULT_STATUS_REFRESH_INTERVAL_SEC,
     "start_on_launch": False,
     "autostart": False,
+    # G4.2 条款 5：退出清理勾选，持久化、默认不勾——不勾 = dsh 服务放行继续运行
+    "quit_stop_dsh": False,
 }
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -1281,18 +1283,75 @@ def toggle_start_on_launch(_icon, _item):
     update_menu()
 
 
+def confirm_quit_dialog() -> dict | None:
+    """退出确认 + 清理勾选（G4.1 条款 4 / G4.2 条款 5，交互语义 = reme-helper 1.2.4）。
+
+    确认钮红底、取消默认焦点、模态 grab_set、Esc/关窗 = 取消（不退出）。
+    返回 {"confirmed": True, "stop_service": bool}；取消返回 None。
+    在托盘菜单线程内跑局部 tk 事件循环（wait_window）：对话框的生命周期完全
+    属于本线程，线程退出前窗口必然已销毁。
+    """
+    import tkinter as tk
+
+    result: dict = {}
+    root = tk.Tk()
+    root.withdraw()
+    dlg = tk.Toplevel()
+    dlg.title("退出确认")
+    dlg.resizable(False, False)
+    dlg.attributes("-topmost", True)
+    body = tk.Frame(dlg, padx=16, pady=12)
+    body.pack()
+    tk.Label(body, text="确认退出 dsh-helper？",
+             font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w")
+    stop_var = tk.BooleanVar(value=bool(CFG.get("quit_stop_dsh", False)))
+    tk.Checkbutton(body, text="同时停止 dsh 服务（不勾 = dsh 继续运行，面板照常可用）",
+                   variable=stop_var, anchor="w", justify="left").pack(fill="x", pady=(8, 4))
+    btns = tk.Frame(body)
+    btns.pack(fill="x", pady=(8, 0))
+    tk.Button(btns, text="退出",
+              command=lambda: (result.update(confirmed=True, stop_service=bool(stop_var.get())),
+                               dlg.destroy()),
+              bg="#c62828", fg="white", width=8).pack(side="right")
+    cancel_btn = tk.Button(btns, text="取消", command=dlg.destroy, width=8)
+    cancel_btn.pack(side="right", padx=(0, 8))
+    cancel_btn.focus_set()
+    dlg.grab_set()
+    dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
+    dlg.bind("<Escape>", lambda _e: dlg.destroy())
+    dlg.update_idletasks()
+    dlg.geometry(f"+{(dlg.winfo_screenwidth() - dlg.winfo_width()) // 2}"
+                 f"+{(dlg.winfo_screenheight() - dlg.winfo_height()) // 2}")
+    root.wait_window(dlg)
+    root.destroy()
+    return result or None
+
+
 def quit_menu(icon, _item):
     # 重入守卫：等待优雅退出的这几秒里用户可能再点一次「退出」。第二个 Ctrl+C 会让
     # dsh 走 forceExitOnce() 跳过落盘冲刷，恰好毁掉这次等待的意义，所以直接忽略。
     if STOP_EVENT.is_set():
         log("quit ignored: already stopping")
         return
+    # G4.1 条款 4：退出必须过确认框；取消/关窗不退出。
+    choice = confirm_quit_dialog()
+    if not choice:
+        log("quit cancelled by user")
+        return
+    stop_dsh = bool(choice.get("stop_service"))
+    if CFG.get("quit_stop_dsh") != stop_dsh:
+        CFG["quit_stop_dsh"] = stop_dsh
+        save_config()
+    # G4.2 条款 4/5：服务放行是合法状态——只有勾选「同时停止」才停 dsh。
     current = state_copy()
     pids = set()
-    if current.get("pid"):
-        pids.add(int(current["pid"]))
-    if MANAGED_PROCESS is not None and MANAGED_PROCESS.poll() is None:
-        pids.add(int(MANAGED_PROCESS.pid))
+    if stop_dsh:
+        if current.get("pid"):
+            pids.add(int(current["pid"]))
+        if MANAGED_PROCESS is not None and MANAGED_PROCESS.poll() is None:
+            pids.add(int(MANAGED_PROCESS.pid))
+    else:
+        log("quit: dsh service left running (released by user choice)")
     # 收尾必须在 icon.stop() 之前同步做完：本进程一退出，daemon 线程立刻消失。
     # 这里给 dsh 最多 GRACEFUL_STOP_WAIT_SEC 秒优雅退出（Ctrl+C → dispose →
     # ReMe 冲刷）；投不出去或超时会自动退回 taskkill /F。
@@ -1302,9 +1361,11 @@ def quit_menu(icon, _item):
         set_state(phase="stopping", message="正在停止…")
         update_menu()
     log(f"quit requested; graceful stop pids={sorted(pids)}")
-    stop_process_group(pids)
+    if pids:
+        stop_process_group(pids)
     icon.stop()
-    log("quit: managed dsh stopped")
+    if pids:
+        log("quit: managed dsh stopped")
     if update_helper.PENDING_CMD:
         # 本进程退出后由脚本接管：等待 → robocopy 铺新版 → 重启新 exe → 自删
         os.system('start "" /min "%s"' % update_helper.PENDING_CMD)

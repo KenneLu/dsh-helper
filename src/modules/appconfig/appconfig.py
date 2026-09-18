@@ -7,3 +7,6 @@ APP_NAME = "dsh-helper"
 REPO_OWNER = "KenneLu"
 REPO_NAME = "dsh-helper"
 EXE_NAME = "dsh-helper.exe"
+
+ICON_ASSET = "resources/img/dsh-helper-icon.png"   # G5：手工资产派生双 ico（icons.py 消费）
+ICON_DRAW = None
