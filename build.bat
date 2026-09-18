@@ -2,61 +2,88 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-set PY=H:\Tools\Python\Python313\python.exe
-rem Version single source of truth: VERSION in main.py (semver, see doc D15)
-set VERSION=
-for /f "tokens=2,*" %%a in ('findstr /b /c:"VERSION = " src\main.py') do set VERSION=%%~b
-if not defined VERSION (
-  echo [ERROR] Cannot read VERSION from main.py.
-  if /i not "%~1"=="nopause" pause
-  exit /b 1
+rem ---------------------------------------------------------------------------
+rem dsh-helper build: gates -> PyInstaller -> release\<name>-<ver>\ -> frozen smoke
+rem ASCII-only: cmd.exe parses .bat with the machine ANSI code page.
+rem Usage: build.bat [norun] [nopause]
+rem   norun    do not start the built exe (starting it is the default)
+rem   nopause  unattended (no "press any key") - used by CI
+rem ---------------------------------------------------------------------------
+
+set RUN_AFTER=1
+set NOPAUSE=
+set BUILD_ARGS=%*
+if not defined BUILD_ARGS goto :args_done
+for %%a in (%BUILD_ARGS%) do (
+  if /i "%%a"=="norun" set RUN_AFTER=
+  if /i "%%a"=="nopause" set NOPAUSE=1
 )
-set VERSION=%VERSION:"=%
-set PACKAGE=dsh-helper-%VERSION%
-set EXE=%PACKAGE%.exe
-if not exist "%PY%" (
-  echo [ERROR] Python not found: %PY%
-  if /i not "%~1"=="nopause" pause
+:args_done
+
+set PY=H:\Tools\Python\Python313\python.exe
+if not exist "%PY%" set PY=python
+"%PY%" -c "import sys" >nul 2>nul
+if errorlevel 1 (
+  echo [ERROR] Python not found. Set PY=... at the top of build.bat.
+  if not defined NOPAUSE pause
   exit /b 1
 )
 
-echo [GATE] py_compile src/main.py + src/modules ...
-"%PY%" -m py_compile src/main.py src/modules/appconfig/appconfig.py src/modules/update_helper/update_helper.py src/modules/paths/paths.py src/modules/log_kit/log_kit.py src/modules/tray_kit/tray_kit.py
-if errorlevel 1 (
-  echo [ERROR] compile gate failed.
-  if /i not "%~1"=="nopause" pause
+rem Version single source of truth: VERSION in src\main.py (D15/D16).
+rem Backslash path: cmd splits forward-slash paths inside for /f (J pitfall).
+set VERSION=
+for /f "tokens=2,*" %%a in ('findstr /b /c:"VERSION = " src\main.py') do set VERSION=%%~b
+if not defined VERSION (
+  echo [ERROR] Cannot read VERSION from src\main.py.
+  if not defined NOPAUSE pause
   exit /b 1
 )
+set VERSION=%VERSION:"=%
+set APPNAME=dsh-helper
+set RELEASE_DIR=release\%APPNAME%-%VERSION%
+set FROZEN_EXE=%RELEASE_DIR%\%APPNAME%.exe
+rem The exe must NOT carry the version (B3): autostart and the update chain
+rem reference a stable name; the release folder and zip name carry the version.
+
+echo [VERSION] %VERSION%  release: %RELEASE_DIR%
+
+if exist "%RELEASE_DIR%" (
+  echo [ERROR] %RELEASE_DIR% already exists. Delete it or bump VERSION.
+  if not defined NOPAUSE pause
+  exit /b 1
+)
+
+rem Running-instance check: prefix match - any version blocks a build.
+tasklist /fo csv 2>nul | findstr /i /c:"%APPNAME%" >nul
+if not errorlevel 1 (
+  echo [ERROR] %APPNAME% is running. Exit it from the tray before building.
+  if not defined NOPAUSE pause
+  exit /b 1
+)
+
+echo [GATE] py_compile src\main.py + src\modules ...
+"%PY%" -m py_compile src\main.py src\modules\appconfig\appconfig.py src\modules\update_helper\update_helper.py src\modules\paths\paths.py src\modules\log_kit\log_kit.py src\modules\tray_kit\tray_kit.py
+if errorlevel 1 (
+  echo [ERROR] compile gate failed.
+  if not defined NOPAUSE pause
+  exit /b 1
+)
+
 echo [GATE] template sync check ...
 "%PY%" ..\my-diy-tool-template\sync_check.py --roots dsh-helper
 if errorlevel 1 (
   echo [ERROR] template drift detected. See my-diy-tool-template/sync_check.py output above.
-  if /i not "%~1"=="nopause" pause
+  if not defined NOPAUSE pause
   exit /b 1
 )
-
-rem Running-instance check: prefix match on purpose - any version of the exe
-rem must block a build, not just the one this script would produce.
-tasklist /fo csv 2>nul | findstr /i /c:"dsh-helper" >nul
-if not errorlevel 1 (
-  echo [ERROR] dsh-helper is running. Please exit the tray app first.
-  if /i not "%~1"=="nopause" pause
-  exit /b 1
-)
-
-for /f %%i in ('powershell -NoProfile -Command "(Get-Date).ToString('yyyyMMdd-HHmmssfff')"') do set PACKAGE_ID=dsh-helper-pkg-%%i
-set RELEASE_ROOT=out\%PACKAGE_ID%
-set RELEASE_DIR=%RELEASE_ROOT%
-
-if exist "build\dist_tmp" rmdir /s /q "build\dist_tmp"
 
 echo [BUILD] PyInstaller onedir noconsole ...
 "%PY%" -m PyInstaller --noconfirm --clean --onedir --noconsole ^
-  --name %PACKAGE% ^
+  --name %APPNAME% ^
   --distpath build\dist_tmp ^
   --workpath build\work ^
   --specpath build ^
-  src/main.py ^
+  src\main.py ^
   --add-data "%~dp0resources;resources" ^
   --collect-all psutil ^
   --collect-all tkinter ^
@@ -64,31 +91,50 @@ echo [BUILD] PyInstaller onedir noconsole ...
   --hidden-import PIL.ImageDraw
 if errorlevel 1 (
   echo [ERROR] PyInstaller failed.
-  if /i not "%~1"=="nopause" pause
+  if not defined NOPAUSE pause
   exit /b 1
 )
 
+echo [PACK] assembling %RELEASE_DIR% ...
 if not exist "%RELEASE_DIR%" mkdir "%RELEASE_DIR%"
-robocopy "build\dist_tmp\%PACKAGE%" "%RELEASE_DIR%" /E /R:1 /W:1 /NFL /NDL /NP >nul
+robocopy "build\dist_tmp\%APPNAME%" "%RELEASE_DIR%" /E /R:1 /W:1 /NFL /NDL /NP >nul
 if errorlevel 8 (
   echo [ERROR] package copy failed.
-  if /i not "%~1"=="nopause" pause
+  if not defined NOPAUSE pause
   exit /b 1
 )
-
-copy /y config.json "%RELEASE_DIR%\config.json" >nul 2>nul
-if exist README.md copy /y README.md "%RELEASE_DIR%\README.md" >nul 2>nul
 rmdir /s /q "build\dist_tmp" 2>nul
 
-echo [TEST] smoke test ...
-"%RELEASE_DIR%\%EXE%" --smoke
-if errorlevel 1 (
-  echo [ERROR] smoke test failed. See %RELEASE_DIR%\smoke.log
-  if /i not "%~1"=="nopause" pause
+copy /y config.json "%RELEASE_DIR%\config.json" >nul 2>nul
+if exist README.md copy /y README.md "%RELEASE_DIR%" >nul
+if exist README.zh-CN.md copy /y README.zh-CN.md "%RELEASE_DIR%" >nul
+
+rem Deliverable checks: exe + runtime - guards against a silently empty package.
+if not exist "%FROZEN_EXE%" (
+  echo [ERROR] %APPNAME%.exe missing from the release.
+  if not defined NOPAUSE pause
   exit /b 1
 )
-type "%RELEASE_DIR%\smoke.log"
+if not exist "%RELEASE_DIR%\_internal\base_library.zip" (
+  echo [ERROR] _internal has no runtime - the package is incomplete.
+  if not defined NOPAUSE pause
+  exit /b 1
+)
+
+set "PYTHONUTF8=1"
+echo [TEST] frozen smoke ...
+"%FROZEN_EXE%" --smoke
+if errorlevel 1 (
+  echo [ERROR] smoke test failed. See %RELEASE_DIR%\log
+  if not defined NOPAUSE pause
+  exit /b 1
+)
+type "%RELEASE_DIR%\smoke.log" 2>nul
+if exist "%RELEASE_DIR%\smoke.log" del /q "%RELEASE_DIR%\smoke.log"
+if exist "%RELEASE_DIR%\log" rmdir /s /q "%RELEASE_DIR%\log"
+
 echo.
-echo [DONE] package: %RELEASE_DIR%\%EXE%
-if /i not "%~1"=="nopause" pause
+echo [DONE] release: %FROZEN_EXE%
+if defined RUN_AFTER start "" "%FROZEN_EXE%"
+if not defined NOPAUSE pause
 exit /b 0
