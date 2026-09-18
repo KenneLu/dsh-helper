@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/tray_kit/tray_kit.py | TEMPLATE-VER: 1.0.1
-"""T7｜托盘机制件：单实例互斥体、退出请求文件 + 监视循环、面板地址行掩码、菜单签名重画。
+# TEMPLATE-FROM: my-diy-tool-template/modules/tray_kit/tray_kit.py | TEMPLATE-VER: 2.0.0
+"""T7｜托盘机制件：单实例互斥体、退出请求文件 + 监视循环、面板地址行掩码、菜单签名重画、退出确认框（2.0.0）。
 
 蓝本：reme-helper（三循环/签名重画/退出纪律，执行文档 F13/D13/D14）与
 local-speak2text（单实例/退出请求文件）。纯函数库：不依赖具体工具，导入即用。
@@ -55,6 +55,69 @@ def single_instance_free(mutex_name):
     already = ctypes.get_last_error() == ERROR_ALREADY_EXISTS
     k32.CloseHandle(handle)
     return not already
+
+
+def confirm_quit_dialog(app_name, checkbox_text, checked_init, parent=None):
+    """退出确认 + 清理勾选对话框（G4.1 条款 4 / G4.2 条款 5；交互形态 = reme-helper 蓝本）。
+
+    形态（家族标准，勿各自发挥）：标题 = app_name；正文「确定退出 <app_name>？
+    勾选项会记住，下次退出沿用。」；单个 Checkbutton；退出钮红底 #E5534B flat 在左、
+    取消 width=10 在右并持默认焦点；屏幕垂直 1/3 居中；模态 grab_set；
+    Esc/关窗 = 取消（不退出）。
+
+    parent：常驻 UI 线程的工具传 tk 父窗口；托盘菜单线程场景传 None（内部建临时
+    Tk 根，wait_window 后销毁——对话框生命周期完全属于调用线程）。
+    返回 {"go": bool, "stop_service": bool}；取消返回 None。富对话框失败由调用方走
+    降级链（原生 askyesno → 放行且默认不清理），本函数不吞异常。
+    """
+    import tkinter as tk
+
+    if parent is not None:
+        win = tk.Toplevel(parent)
+        _temp_root = None
+    else:
+        _temp_root = tk.Tk()
+        _temp_root.withdraw()
+        win = tk.Toplevel(_temp_root)
+    win.title(app_name)
+    win.attributes("-topmost", True)
+    win.resizable(False, False)
+    result = {"go": False, "stop_service": bool(checked_init)}
+
+    body = tk.Frame(win)
+    body.pack(padx=18, pady=(14, 6))
+    tk.Label(body, text=f"确定退出 {app_name}？勾选项会记住，下次退出沿用。",
+             justify="left", wraplength=380).pack(anchor="w")
+    opts = tk.Frame(win)
+    opts.pack(anchor="w", padx=18, pady=(6, 0))
+    var = tk.BooleanVar(master=win, value=result["stop_service"])
+    tk.Checkbutton(opts, text=checkbox_text, variable=var).pack(anchor="w")
+    btns = tk.Frame(win)
+    btns.pack(pady=(8, 12))
+
+    def confirm():
+        result.update(go=True, stop_service=bool(var.get()))
+        win.destroy()
+
+    def cancel():
+        win.destroy()
+
+    quit_btn = tk.Button(btns, text="退出", command=confirm, width=10,
+                         bg="#E5534B", fg="#FFFFFF", relief="flat")
+    cancel_btn = tk.Button(btns, text="取消", command=cancel, width=10)
+    quit_btn.pack(side="left", padx=8)
+    cancel_btn.pack(side="left", padx=8)
+    cancel_btn.focus_set()
+    win.protocol("WM_DELETE_WINDOW", cancel)
+    win.bind("<Escape>", lambda _event: cancel())
+    win.update_idletasks()
+    win.geometry("+%d+%d" % ((win.winfo_screenwidth() - win.winfo_width()) // 2,
+                             max(40, (win.winfo_screenheight() - win.winfo_height()) // 3)))
+    win.grab_set()
+    win.wait_window()
+    if _temp_root is not None:
+        _temp_root.destroy()
+    return result or None
 
 
 def warn_duplicate_instance(app_name, hint="请看任务栏右下角通知区域里的图标。"):

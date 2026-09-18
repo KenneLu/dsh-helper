@@ -1283,59 +1283,33 @@ def toggle_start_on_launch(_icon, _item):
     update_menu()
 
 
-def confirm_quit_dialog() -> dict | None:
-    """退出确认 + 清理勾选（G4.1 条款 4 / G4.2 条款 5，交互语义 = reme-helper 1.2.4）。
-
-    确认钮红底、取消默认焦点、模态 grab_set、Esc/关窗 = 取消（不退出）。
-    返回 {"confirmed": True, "stop_service": bool}；取消返回 None。
-    在托盘菜单线程内跑局部 tk 事件循环（wait_window）：对话框的生命周期完全
-    属于本线程，线程退出前窗口必然已销毁。
-    """
-    import tkinter as tk
-
-    result: dict = {}
-    root = tk.Tk()
-    root.withdraw()
-    dlg = tk.Toplevel()
-    dlg.title("退出确认")
-    dlg.resizable(False, False)
-    dlg.attributes("-topmost", True)
-    body = tk.Frame(dlg, padx=16, pady=12)
-    body.pack()
-    tk.Label(body, text="确认退出 dsh-helper？",
-             font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w")
-    stop_var = tk.BooleanVar(value=bool(CFG.get("quit_stop_dsh", False)))
-    tk.Checkbutton(body, text="同时停止 dsh 服务（不勾 = dsh 继续运行，面板照常可用）",
-                   variable=stop_var, anchor="w", justify="left").pack(fill="x", pady=(8, 4))
-    btns = tk.Frame(body)
-    btns.pack(fill="x", pady=(8, 0))
-    tk.Button(btns, text="退出",
-              command=lambda: (result.update(confirmed=True, stop_service=bool(stop_var.get())),
-                               dlg.destroy()),
-              bg="#c62828", fg="white", width=8).pack(side="right")
-    cancel_btn = tk.Button(btns, text="取消", command=dlg.destroy, width=8)
-    cancel_btn.pack(side="right", padx=(0, 8))
-    cancel_btn.focus_set()
-    dlg.grab_set()
-    dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
-    dlg.bind("<Escape>", lambda _e: dlg.destroy())
-    dlg.update_idletasks()
-    dlg.geometry(f"+{(dlg.winfo_screenwidth() - dlg.winfo_width()) // 2}"
-                 f"+{(dlg.winfo_screenheight() - dlg.winfo_height()) // 2}")
-    root.wait_window(dlg)
-    root.destroy()
-    return result or None
-
-
 def quit_menu(icon, _item):
     # 重入守卫：等待优雅退出的这几秒里用户可能再点一次「退出」。第二个 Ctrl+C 会让
     # dsh 走 forceExitOnce() 跳过落盘冲刷，恰好毁掉这次等待的意义，所以直接忽略。
     if STOP_EVENT.is_set():
         log("quit ignored: already stopping")
         return
-    # G4.1 条款 4：退出必须过确认框；取消/关窗不退出。
-    choice = confirm_quit_dialog()
-    if not choice:
+    # G4.1 条款 4：退出必须过确认框；取消/关窗不退出。降级链（G4.1 × G4.2 互补，
+    # 禁止跳过确认）：富对话框失败 → 原生 askyesno（清理按持久化配置）→
+    # 原生也失败（纯托盘实例，唯一豁免）→ 放行退出且默认不清理。
+    choice = None
+    try:
+        choice = tray_kit.confirm_quit_dialog(APP_NAME, "同时关闭当前 dsh 服务",
+                                     bool(CFG.get("quit_stop_dsh", False)))
+    except Exception as exc:
+        log(f"quit dialog failed ({type(exc).__name__}: {exc}); falling back to native confirm")
+        try:
+            import tkinter as _tk
+            from tkinter import messagebox as _mb
+            _root = _tk.Tk()
+            _root.withdraw()
+            _go = bool(_mb.askyesno(APP_NAME, "确定退出 dsh-helper？清理选项按配置（退出后可在配置中修改）。"))
+            _root.destroy()
+            choice = {"go": _go, "stop_service": bool(CFG.get("quit_stop_dsh", False))}
+        except Exception as exc2:
+            log(f"native confirm failed ({type(exc2).__name__}: {exc2}); "
+                f"proceeding without confirmation (dsh untouched by default)")
+    if not choice or not choice.get("go"):
         log("quit cancelled by user")
         return
     stop_dsh = bool(choice.get("stop_service"))
