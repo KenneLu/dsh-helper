@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/log_kit/log_kit.py | TEMPLATE-VER: 1.0.1
+# TEMPLATE-FROM: my-diy-tool-template/modules/log_kit/log_kit.py | TEMPLATE-VER: 1.0.2
 """T12｜运行日志：RotatingFileHandler 单文件 1MB、保留 3 个滚存（总量 ~4MB 封顶）。
 
 参数与 reme-helper 的日志方案一致（house 标准 D13）：日志跟数据区走
@@ -25,12 +25,18 @@ def get_logger(log_dir):
         log_dir.mkdir(parents=True, exist_ok=True)
         lg = logging.getLogger(APP_ID)
         if not lg.handlers:
-            handler = RotatingFileHandler(
-                log_dir / (APP_ID + ".log"),
-                maxBytes=LOG_MAX_BYTES,
-                backupCount=LOG_BACKUPS,
-                encoding="utf-8",
-            )
+            try:
+                handler = RotatingFileHandler(
+                    log_dir / (APP_ID + ".log"),
+                    maxBytes=LOG_MAX_BYTES,
+                    backupCount=LOG_BACKUPS,
+                    encoding="utf-8",
+                )
+            except Exception:
+                # 升级窗口期另一实例还开着日志文件时改名会失败（Windows）：
+                # 宁可这一轮不滚，也不要因为日志装不上而启动失败（reme-helper 语义，1.0.2 沉淀）
+                handler = logging.FileHandler(
+                    log_dir / (APP_ID + ".log"), encoding="utf-8")
             handler.setFormatter(
                 logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
             lg.addHandler(handler)

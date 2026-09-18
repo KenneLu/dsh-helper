@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/tray_kit/tray_kit.py | TEMPLATE-VER: 1.0.0
+# TEMPLATE-FROM: my-diy-tool-template/modules/tray_kit/tray_kit.py | TEMPLATE-VER: 1.0.1
 """T7｜托盘机制件：单实例互斥体、退出请求文件 + 监视循环、面板地址行掩码、菜单签名重画。
 
 蓝本：reme-helper（三循环/签名重画/退出纪律，执行文档 F13/D13/D14）与
@@ -36,6 +36,25 @@ def acquire_single_instance(app_id, mutex_name=None, log=print):
     except Exception as exc:
         log(f"single-instance guard unavailable ({exc}); continuing")
         return True
+
+
+def single_instance_free(mutex_name):
+    """探测互斥体当前是否空着，**不持有**它（reme-helper 语义，1.0.1 沉淀）。
+
+    诊断参数用它判断「此刻没有别的实例在跑」；自检进程不能顺手占锁，
+    否则退出前用户紧接着启动的托盘会以为自己被抢了。
+    """
+    if os.name != "nt":
+        return True
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+    k32.CreateMutexW.restype = wintypes.HANDLE
+    handle = k32.CreateMutexW(None, False, mutex_name)
+    if not handle:
+        return True
+    already = ctypes.get_last_error() == ERROR_ALREADY_EXISTS
+    k32.CloseHandle(handle)
+    return not already
 
 
 def warn_duplicate_instance(app_name, hint="请看任务栏右下角通知区域里的图标。"):
