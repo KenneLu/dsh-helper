@@ -5,7 +5,7 @@ cd /d "%~dp0"
 set PY=H:\Tools\Python\Python313\python.exe
 rem Version single source of truth: VERSION in main.py (semver, see doc D15)
 set VERSION=
-for /f "tokens=2,*" %%a in ('findstr /b /c:"VERSION = " main.py') do set VERSION=%%~b
+for /f "tokens=2,*" %%a in ('findstr /b /c:"VERSION = " src\main.py') do set VERSION=%%~b
 if not defined VERSION (
   echo [ERROR] Cannot read VERSION from main.py.
   if /i not "%~1"=="nopause" pause
@@ -20,8 +20,8 @@ if not exist "%PY%" (
   exit /b 1
 )
 
-echo [GATE] py_compile main.py + src/modules ...
-"%PY%" -m py_compile main.py src/modules/appconfig/appconfig.py src/modules/update_helper/update_helper.py src/modules/paths/paths.py src/modules/log_kit/log_kit.py src/modules/tray_kit/tray_kit.py
+echo [GATE] py_compile src/main.py + src/modules ...
+"%PY%" -m py_compile src/main.py src/modules/appconfig/appconfig.py src/modules/update_helper/update_helper.py src/modules/paths/paths.py src/modules/log_kit/log_kit.py src/modules/tray_kit/tray_kit.py
 if errorlevel 1 (
   echo [ERROR] compile gate failed.
   if /i not "%~1"=="nopause" pause
@@ -53,12 +53,11 @@ if exist "build\dist_tmp" rmdir /s /q "build\dist_tmp"
 echo [BUILD] PyInstaller onedir noconsole ...
 "%PY%" -m PyInstaller --noconfirm --clean --onedir --noconsole ^
   --name %PACKAGE% ^
-  --paths "%~dp0src" ^
   --distpath build\dist_tmp ^
   --workpath build\work ^
   --specpath build ^
-  main.py ^
-  --add-data "%~dp0assets;assets" ^
+  src/main.py ^
+  --add-data "%~dp0resources;resources" ^
   --collect-all psutil ^
   --collect-all tkinter ^
   --hidden-import pystray ^

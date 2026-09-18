@@ -24,7 +24,7 @@ jobs:
           pip install psutil pystray pillow
 
       - name: Compile check
-        run: python -m py_compile main.py src/modules/appconfig/appconfig.py src/modules/update_helper/update_helper.py src/modules/paths/paths.py src/modules/log_kit/log_kit.py src/modules/tray_kit/tray_kit.py
+        run: python -m py_compile src/main.py src/modules/appconfig/appconfig.py src/modules/update_helper/update_helper.py src/modules/paths/paths.py src/modules/log_kit/log_kit.py src/modules/tray_kit/tray_kit.py
 
       - name: Import check (module-level config seed + menu data must not blow up)
         run: python -c "import sys; sys.path.insert(0, 'src'); import main; print('import OK, VERSION =', main.VERSION)"

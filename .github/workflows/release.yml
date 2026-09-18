@@ -36,7 +36,7 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $line = Select-String -Path main.py -Pattern '^VERSION = ' | Select-Object -First 1
+          $line = Select-String -Path src/main.py -Pattern '^VERSION = ' | Select-Object -First 1
           if (-not $line) { throw "VERSION not found in main.py" }
           $version = ($line.Line -split '"')[1]
           "version=$version" >> $env:GITHUB_OUTPUT
@@ -44,7 +44,7 @@ jobs:
           Write-Host "version=$version"
 
       - name: Compile gate
-        run: python -m py_compile main.py src/modules/appconfig/appconfig.py src/modules/update_helper/update_helper.py src/modules/paths/paths.py src/modules/log_kit/log_kit.py src/modules/tray_kit/tray_kit.py
+        run: python -m py_compile src/main.py src/modules/appconfig/appconfig.py src/modules/update_helper/update_helper.py src/modules/paths/paths.py src/modules/log_kit/log_kit.py src/modules/tray_kit/tray_kit.py
 
       # CI 上没有 dsh.cmd，--smoke 门禁只在本机 build.bat 里跑；
       # 这里用"能构建 + exe 存在"作为最低门禁。
@@ -54,12 +54,11 @@ jobs:
           $pkg = "${{ steps.version.outputs.package }}"
           python -m PyInstaller --noconfirm --clean --onedir --noconsole `
             --name $pkg `
-            --paths src `
             --distpath build\dist_tmp `
             --workpath build\work `
             --specpath build `
-            main.py `
-            --add-data "$pwd\assets;assets" `
+            src/main.py `
+            --add-data "$pwd\resources;resources" `
             --collect-all psutil `
             --collect-all tkinter `
             --hidden-import pystray `

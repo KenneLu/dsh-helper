@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/paths/paths.py | TEMPLATE-VER: 1.1.1
+# TEMPLATE-FROM: my-diy-tool-template/modules/paths/paths.py | TEMPLATE-VER: 1.1.2
 """T2｜路径与数据区（蓝本 local-speak2text/paths.py）。
 
 四个位置，职责分明：APP_DIR 程序本体；RUN_DIR 本次运行的包；USER_DATA_DIR 用户
 数据（config + log + update）；INSTALL_DIR 稳定安装位（自启指向，更新不变）。
 **数据根整体可被环境变量重定向**（F11 教训）：测试/工具链必须用独立数据区，
 严禁与用户常驻实例共享 config/log/退出请求等任何落盘文件。
+
+1.1.2：dev 态锚定改为「向上查找 main.py 所在目录的上一级（仓库根）」——家族统一
+src/main.py + src/modules/ 布局后，本文件不再依赖自身所在深度。
 """
 import os
 import shutil
@@ -17,7 +20,11 @@ from modules.appconfig import APP_ID
 if getattr(sys, "frozen", False):
     APP_DIR = Path(sys.executable).resolve().parent
 else:
-    APP_DIR = Path(__file__).resolve().parent
+    # dev 态：exe 旁语义 = 仓库根（出厂 config/模型/构建产物住根）；src/ 只放代码。
+    # 向上找 main.py 所在的 src/，再上一级 = 仓库根——与本模块所在深度无关。
+    _here = Path(__file__).resolve()
+    _src_dir = next((p for p in _here.parents if (p / "main.py").exists()), _here.parents[1])
+    APP_DIR = _src_dir.parent
 RUN_DIR = APP_DIR
 
 _DATA_ROOT = Path(

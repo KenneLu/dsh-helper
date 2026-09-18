@@ -24,7 +24,6 @@ import psutil
 import pystray
 from PIL import Image, ImageDraw, ImageOps
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))   # src/modules 布局引导
 from modules import log_kit, paths, tray_kit, update_helper   # noqa: E402
 
 
@@ -69,7 +68,7 @@ def resource_path(name):
     return APP_DIR / name
 
 
-ICON_ASSET = resource_path("assets/dsh-helper-icon.png")
+ICON_ASSET = resource_path("resources/img/dsh-helper-icon.png")
 _ICON_BASE = None
 
 STATUS_REFRESH_INTERVAL_CHOICES = (
