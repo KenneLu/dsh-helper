@@ -3,6 +3,13 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
+## Unreleased
+
+- Bilingual README (baseline 8): `README.md` is now the English canonical
+  version with `README.zh-CN.md` as the Chinese one, language switch lines on
+  top of both; stale 1.6-era menu names and packaging paths refreshed. Both
+  files now ship inside the release zip.
+
 ## 1.7.0
 
 - Online update: "检查 dsh-helper 更新 / 下载并更新 dsh-helper" tray items backed

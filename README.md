@@ -1,55 +1,59 @@
 # dsh-helper v1.7.0
 
-Windows 托盘工具，用右键菜单管理 DeepSeek Harness 的 `dsh web`：启动、停止、重启、打开面板、复制面板地址和状态刷新。状态刷新默认每 1 分钟执行一次，可在菜单中调整；端口默认固定 `3080`（dsh web 官方兜底端口），仅当该端口已被占用时，本次启动回退为自动端口。
+**English** | [简体中文](README.zh-CN.md)
 
-1.7.0 起的补充能力：
+Windows tray tool that manages DeepSeek Harness's `dsh web` from a right-click menu: start, stop, restart, open the panel, copy the panel URL, and status refresh. Status refresh runs every 1 minute by default and is adjustable from the menu. The port is fixed at `3080` by default (the official `dsh web` fallback port); only when that port is taken does the current launch fall back to an automatic port.
 
-- **在线更新**：菜单「检查 dsh-helper 更新」「下载并更新 dsh-helper」——启动时也会自动检查（24 小时节流）。下载走 GitHub Releases（zip + sha256 校验），退出托盘后自动完成替换并重启新版本。
-- **数据区**：配置与日志住在 `%LOCALAPPDATA%\dsh-helper\`（`config.json` + `log\`）；1.6 及更早版本放在 exe 旁的旧配置会在首次运行时自动迁移。日志按 1MB×3 滚动，菜单「打开日志目录」直达。
-- **面板地址掩码**：菜单里 token 显示为 `••••••`；完整地址（含 token）只通过地址行正下方的「复制面板地址」获取。
+Added in 1.7.0:
 
-## 运行
+- **Online updates**: menu items "Check for dsh-helper updates" and "Download and update dsh-helper" — also auto-checked at startup (24-hour throttle). Downloads come from GitHub Releases (zip + sha256 verified); after you quit the tray, the update is applied automatically and the new version restarts.
+- **User data area**: config and logs live in `%LOCALAPPDATA%\dsh-helper\` (`config.json` + `log\`); a pre-1.7 config.json next to the exe is migrated automatically on first run. Logs rotate at 1 MB × 3 backups, with an "Open log folder" menu item.
+- **Panel URL masking**: the token is shown as `••••••` in the menu; the full URL (including the token) is only available via "Copy panel URL", which sits directly under the URL line.
 
-双击 `out\dsh-helper-pkg-<YYYYMMDD-HHmmssfff>\dsh-helper-1.7.0.exe`。启动后右下角出现灰色鲸鱼喷水图标，dsh 运行后鲸鱼恢复蓝色，喷水变为柔和的暖金色。
+## Running
 
-**同时只允许一个实例**：重复双击不会多开托盘，而是弹出提示并取消本次启动。
+Launch `out\dsh-helper-pkg-<YYYYMMDD-HHmmssfff>\dsh-helper.exe`. A grey whale icon appears in the tray; once dsh is running the whale turns blue with a soft warm-gold spout.
 
-右键菜单：
+**Single instance only**: double-clicking again does not open a second tray — it shows a notice and cancels that launch.
 
-| 菜单项 | 说明 |
+Right-click menu:
+
+| Menu item | Description |
 |---|---|
-| 状态 | 显示 dsh 当前处于已停止、启动中、运行中、停止中或异常 |
-| 当前面板 | 显示实际监听地址，可直接复制 |
-| 启动 dsh Web | 使用 `dsh.cmd web --no-open --host 127.0.0.1 --port 3080` 启动（3080 被占用时本次自动改用空闲端口），服务就绪后自动打开面板 |
-| 停止 dsh Web | 先发 Ctrl+C 让 dsh 优雅退出（最多等 8 秒），超时才强制结束整棵进程树 |
-| 重启 dsh Web | 优雅停止后按配置端口（默认 3080）重新启动，端口冲突时本次回退自动端口，成功后自动打开面板 |
-| 打开 dsh 面板 | 用默认浏览器打开当前地址 |
-| 复制当前 dsh Web 地址 | 写入 Windows 剪贴板 |
-| 刷新状态 | 重新扫描 dsh 进程和监听端口 |
-| 状态刷新间隔 | 5秒 / 20秒 / 1分钟 / 5分钟 / 10分钟，写回 `config.json` |
-| 开机自启 | 用户级 HKCU Run，不需要管理员权限；只有登记的路径就是当前这个程序时才勾选 |
-| 启动时自动启动 dsh Web | dsh-helper 启动后自动启动 dsh Web |
-| 打开配置文件 | 查看运行配置 |
-| dsh.cmd 路径 | 子菜单：打开路径、自动检测、选择路径 |
-| 打开日志目录 | 查看运行日志 |
-| 退出 | 先优雅停止 dsh（最多等 8 秒），再退出托盘工具；等待期间本项置灰 |
+| Status | Shows whether dsh is stopped, starting, running, stopping, or in error |
+| Current panel | Shows the actual listening address, with the token masked (`••••••`) |
+| Copy panel URL | Copies the full URL (including the token) to the clipboard — the only way to get it |
+| Check for dsh-helper updates | Queries GitHub Releases and notifies on the result |
+| Download and update dsh-helper | Downloads the new version (sha256 verified); applied after you quit the tray |
+| Start dsh Web | Runs `dsh.cmd web --no-open --host 127.0.0.1 --port 3080` (falls back to a free port if 3080 is busy); opens the panel once ready |
+| Stop dsh Web | Sends Ctrl+C for a graceful dsh exit (up to 8 s), then force-kills the process tree on timeout |
+| Restart dsh Web | Graceful stop, then restart on the configured port (default 3080); opens the panel on success |
+| Open dsh panel | Opens the current URL in the default browser (also the double-click default action) |
+| Refresh status | Re-scans dsh processes and listening ports |
+| Autostart | Per-user HKCU Run key, no admin required; the checkbox is only shown when the registered path is this exact program |
+| Start dsh Web on launch | Starts dsh Web automatically after dsh-helper starts |
+| Open config file | Opens the runtime config |
+| dsh.cmd path | Submenu: open path, auto-detect, choose path |
+| Open log folder | Opens the running log directory |
+| Status refresh interval | 5 s / 20 s / 1 min / 5 min / 10 min, written back to `config.json` |
+| Quit | Gracefully stops dsh first (up to 8 s), then exits; greyed out while waiting |
 
-图标状态：dsh 未运行时鲸鱼和喷水整体灰色；dsh 运行时显示原始蓝色鲸鱼和柔和暖金色喷水。
+Icon states: grey whale and spout when dsh is not running; original blue whale with a soft warm-gold spout when it is.
 
-## 设计要点
+## Design notes
 
-- 只使用配置文件中已确认的 `dsh.cmd` 路径；首次启动或路径失效时通过 PATH 和 npm 环境变量自动检测。
-- 单实例：用命名互斥体（`Local\dsh-helper-single-instance`）把托盘进程钉在 1 个，互斥体由内核管理、进程消失即自动释放。必须只留一个——多个托盘会各自监控同一台 dsh、状态互相矛盾，而且**每个实例的“退出”都会先停 dsh**，想清掉多余图标会顺手把 dsh 关掉。守卫自身失败时放行（宁可多开，也不能让程序打不开）。
-- 启动前扫描已有 `dsh web` 进程；发现已有面板时直接接管地址，不重复创建服务。
-- 停止、重启和退出都先向 dsh 进程树发 `Ctrl+C` 触发官方优雅退出：dsh 会 `dispose` 插件并落盘所有会话，避免丢失未写入的记忆和会话数据。等待最多 8 秒；仍未退出时用 `taskkill /T /F` 结束整棵进程树，避免留下孤儿进程。`Ctrl+C` 只广播**一次**（同一个 console 里再投一次会被 dsh 当成"第二次信号"而跳过落盘）。附加/脱离 console 会重绑本进程的标准句柄，脱离后**必须还原**，否则之后每次 `subprocess.run` 都会抛 `WinError 6`，`taskkill`、`reg query` 全部失效。
-- 通过 dsh 启动输出和本机监听端口双重识别实际地址。
-- 兼容 DSH 0.1.2+ 的带 token Web 地址：保留 `?token=...`，把 token 换 cookie 时的 3xx 响应视为服务已就绪。
-- dsh 启动成功后自动打开一次面板；默认浏览器无法接管时只提示打开失败，不影响 dsh 运行状态。
-- 当前地址只保存在内存和菜单中，不写入账号、密码或外部服务。
+- Only a confirmed `dsh.cmd` path from the config is used; on first start or when the path goes stale it is auto-detected via PATH and npm environment variables.
+- Single instance: a named mutex (`Local\dsh-helper-single-instance`) pins the tray process to one. The mutex is kernel-managed and released when the process dies. One instance only — multiple trays would each watch the same dsh with contradictory state, and **every instance's "Quit" stops dsh first**. The guard fails open (better an extra tray than an app that won't start).
+- Before starting, existing `dsh web` processes are scanned; if a panel is already up, its URL is adopted instead of creating a second service.
+- Stop, restart, and quit all send `Ctrl+C` to the dsh process tree first for the official graceful exit: dsh disposes plugins and flushes sessions so no memory or session data is lost. Up to 8 seconds, then `taskkill /T /F` cleans up the tree. `Ctrl+C` is broadcast exactly **once** (a second signal in the same console makes dsh skip flushing). Attaching/detaching the console rebinds standard handles — they must be restored, or every later `subprocess.run` throws `WinError 6`.
+- The actual URL is identified from both dsh's startup output and the local listening port.
+- Compatible with DSH 0.1.2+ token URLs: `?token=...` is kept, and the 3xx token-to-cookie exchange is treated as "service ready".
+- The panel opens once automatically after a successful start; a browser-handoff failure only notifies and never turns the dsh start into an error.
+- The current URL lives only in memory and the menu — no accounts, passwords, or external services.
 
-## 配置
+## Configuration
 
-配置文件为运行目录下的 `config.json`：
+`config.json` lives in the user data directory (`%LOCALAPPDATA%\dsh-helper\`):
 
 ```json
 {
@@ -62,44 +66,35 @@ Windows 托盘工具，用右键菜单管理 DeepSeek Harness 的 `dsh web`：�
 }
 ```
 
-`port` 默认 `3080`（dsh web 官方兜底端口，与 VS Code 扩展默认值一致）。设为具体端口时，启动前会先探测该端口：可用则固定使用；**已被占用时本次自动改用空闲端口**，并在系统通知与日志中说明原因。设为 `0` 表示不使用固定端口，每次都由 dsh/操作系统选择空闲端口。不要选在 Windows 动态端口段（默认 49152–65535）内，否则可能被系统临时端口随机占用。
+`port` defaults to `3080` (the official dsh web fallback port, matching the VS Code extension). Before starting, the port is probed: free means it is used as-is; **taken means this launch falls back to a free port**, with the reason in the notification and log. `0` means never fix a port — dsh/the OS picks a free one each time. Avoid the Windows dynamic range (49152–65535) or a random ephemeral port may steal it.
 
-`dsh_cmd` 为空表示尚未完成 dsh 配置。首次启动或配置路径失效时会自动检测；选择新的 dsh.cmd 后会执行 `dsh.cmd web --help` 校验，不会启动 Web 服务。
+An empty `dsh_cmd` means dsh is not configured yet. It is auto-detected on first start or when the configured path goes stale; picking a new dsh.cmd runs `dsh.cmd web --help` as validation without starting the web service.
 
-`status_refresh_interval_sec` 可设为 `5`、`20`、`60`、`300` 或 `600`，默认 `60`。
+`status_refresh_interval_sec` accepts `5`, `20`, `60`, `300`, or `600`; default `60`.
 
-“自动检测”按配置中的现有路径、Windows PATH 和 npm 常见目录查找 `dsh.cmd`，逐个执行 `dsh.cmd web --help` 校验；找到第一个有效路径后写入配置。未找到有效路径时保留原配置。
+"Auto-detect" searches the existing configured path, the Windows PATH, and common npm directories, validating each candidate with `dsh.cmd web --help`; the first valid path is written to the config. If none validates, the old config is kept.
 
-## 打包
+## Packaging
 
-使用固定 Python 和 PyInstaller：
+Uses a fixed Python and PyInstaller:
 
 ```text
 H:\Tools\Python\Python313\python.exe
 build.bat nopause
 ```
 
-发布包结构：
+`build.bat` runs a compile gate, builds an `onedir/noconsole` package, then runs `--smoke` to verify the dsh command and port decision (fixed port when free, otherwise automatic fallback). Historical packages stay in `out\`.
 
-```text
-out\dsh-helper-pkg-<YYYYMMDD-HHmmssfff>\
-  dsh-helper-1.6.exe
-  _internal\
-  config.json
-  README.md
-  log\
-```
+Official releases are built by CI: push a `v<semver>` tag (e.g. `v1.7.0`) and the release workflow publishes a zip + sha256 on GitHub Releases — the same layout the in-app updater consumes. The shipped exe is named `dsh-helper.exe` without a version (the autostart registry stores the full path; versions live in the zip/folder names).
 
-`build.bat` 会先构建 `onedir/noconsole` 包，再运行 `--smoke` 验证 dsh 命令与端口决策（固定端口可用则用固定端口，否则回退自动端口），历史包保留在 `out` 中。
+## FAQ
 
-## 常见问题
-
-- **菜单显示找不到 dsh.cmd**：点击“dsh.cmd 路径 → 自动检测”，或使用“选择路径”指定实际的 dsh.cmd。
-- **启动后地址变化**：默认固定 3080 后地址不再变化；只有 3080 被占用而本次回退为自动端口时地址才会变，此时用“复制当前 dsh Web 地址”取得最新地址（通知与日志也会说明回退原因）。
-- **希望地址固定**：默认即为固定 3080，无需配置；如需换端口，把 `config.json` 的 `port` 改成一个空闲端口，避开 49152–65535 动态端口段。
-- **DSH 0.1.2+ 地址带 token**：不要手工删除地址中的 `?token=...`；每次重启会生成新的 token。
-- **退出时 dsh 怎么办**：点击“退出”会先让 dsh 优雅退出（等待最多 8 秒），再退出托盘工具。优雅退出让 dsh 有机会完成插件清理和会话落盘，避免丢失尚未写入的记忆或会话数据；只有超时才强制结束进程。这 8 秒里菜单第一行显示“状态：停止中”、图标转灰，且“启动 / 停止 / 重启 / 退出”全部置灰，重复点击无效——这是刻意的，请等它自己消失。
-- **“开机自启”没勾选，但注册表里确实有项**：说明 Run 项登记的不是当前这个程序（换过包目录、或旧包已被删除）。勾选状态按“下次开机真的会起来，而且起来的正是这一个”显示，所以此时显示未勾选才是对的；点一下“开机自启”就会用当前路径覆盖写入。程序不会自动改写注册表。
-- **双击后弹窗说“已经在运行了”**：说明已经有一个托盘实例在跑（看右下角鲸鱼图标），单实例守卫取消了本次启动。这不会多开托盘。
-- **换新版本的正确顺序**：先让旧实例退出，再启动新包。互斥体名字是固定的 `Local\dsh-helper-single-instance`、**不含版本号**，所以 1.5 及以后的所有版本共用同一个、会**跨版本互相拦**——直接启动新包会弹“已经在运行了”，必须先让旧实例真正退出。只有 1.4 及更早（没有守卫）拦不住。
-- **托盘右键没反应 / 菜单点了没动静**：1.4 / 1.5 的已知 bug——优雅停止后附加/脱离 console 让标准句柄悬空，之后 `subprocess` 抛 `WinError 6`，而它从菜单回调里逃出来会卡住菜单渲染。**1.6 已修**（还原句柄 + 查询失败只记日志）。遇到时用任务管理器结束 `dsh-helper-*.exe` 即可，dsh 不受影响。
+- **Menu says dsh.cmd not found**: use "dsh.cmd path → Auto-detect", or "Choose path" to point at the real dsh.cmd.
+- **URL changed after starting**: with the default fixed 3080 it no longer changes; only a fallback to an automatic port changes it — use "Copy panel URL" for the latest address (the notification and log explain the fallback).
+- **Want a fixed address**: 3080 is fixed by default; to change it, set `config.json`'s `port` to a free port outside 49152–65535.
+- **DSH 0.1.2+ token URLs**: never hand-edit `?token=...` out of the URL; a fresh token is generated on each restart.
+- **What happens to dsh on Quit**: Quit stops dsh gracefully first (up to 8 s) so plugins dispose and sessions flush, then exits the tray. During those 8 seconds the status line shows "Stopping", the icon turns grey, and Start/Stop/Restart/Quit are all disabled — intentional; let it finish.
+- **Autostart unchecked but the registry entry exists**: the Run key does not point at this exact program (the package folder moved, or the old package was deleted). The checkbox means "it will actually start next boot, and it will be this one" — so unchecked is honest. Click "Autostart" once to overwrite with the current path. The program never edits the registry on its own.
+- **A notice says "already running" after double-clicking**: one tray instance is already alive (the whale in the notification area); the single-instance guard cancelled this launch.
+- **Correct order when switching versions**: quit the old instance before starting the new package. The mutex name is fixed and version-less, so all versions from 1.5 on mutually block across versions — starting a new package while an old one runs shows "already running". Versions 1.4 and earlier have no guard. Since 1.7.0, the in-app updater handles this: quit the tray and it swaps and restarts for you.
+- **Tray right-click unresponsive / menu clicks do nothing**: known 1.4/1.5 bug — graceful stop left dangling console handles, `subprocess` threw `WinError 6`, and the exception escaping a menu callback stalled menu rendering. **Fixed in 1.6** (handles restored; query failures only log). Kill `dsh-helper-*.exe` from Task Manager if you hit it; dsh is unaffected.
