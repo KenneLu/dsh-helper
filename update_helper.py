@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: _template/modules/update_helper/update_helper.py | TEMPLATE-VER: 1.0.0
+# TEMPLATE-FROM: my-diy-tool-template/modules/update_helper/update_helper.py | TEMPLATE-VER: 1.0.0
 """T4｜在线更新三段式：查（GitHub Releases）→ 下（zip + sha256）→ 换（退出后铺目录并重启）。
 
 换目录为什么必须"独立脚本"：Windows 上运行中的 exe 换不掉。退出托盘时拉起

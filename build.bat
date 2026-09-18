@@ -28,7 +28,7 @@ if errorlevel 1 (
   exit /b 1
 )
 echo [GATE] template sync check ...
-"%PY%" ..\_template\sync_check.py --roots dsh-helper
+"%PY%" ..\my-diy-tool-template\sync_check.py --roots dsh-helper
 if errorlevel 1 (
   echo [ERROR] template drift detected. See _template/sync_check.py output above.
   if /i not "%~1"=="nopause" pause
