@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-MODULE: paths | TEMPLATE-VER: 1.1.0
+# TEMPLATE-FROM: my-diy-tool-template/modules/paths/paths.py | TEMPLATE-VER: 1.1.1
 """T2｜路径与数据区（蓝本 local-speak2text/paths.py）。
 
 四个位置，职责分明：APP_DIR 程序本体；RUN_DIR 本次运行的包；USER_DATA_DIR 用户
@@ -12,7 +12,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from appconfig import APP_ID
+from modules.appconfig import APP_ID
 
 if getattr(sys, "frozen", False):
     APP_DIR = Path(sys.executable).resolve().parent

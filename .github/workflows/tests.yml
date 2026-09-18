@@ -24,11 +24,11 @@ jobs:
           pip install psutil pystray pillow
 
       - name: Compile check
-        run: python -m py_compile main.py modules/update_helper.py appconfig.py modules/paths.py modules/log_kit.py modules/tray_kit.py
+        run: python -m py_compile main.py src/modules/appconfig/appconfig.py src/modules/update_helper/update_helper.py src/modules/paths/paths.py src/modules/log_kit/log_kit.py src/modules/tray_kit/tray_kit.py
 
       - name: Import check (module-level config seed + menu data must not blow up)
-        run: python -c "import main; print('import OK, VERSION =', main.VERSION)"
+        run: python -c "import sys; sys.path.insert(0, 'src'); import main; print('import OK, VERSION =', main.VERSION)"
 
       - name: Update logic check
         run: |
-          python -c "import update_helper as u; assert u._version_is_newer('1.8.0','1.7.0'); assert not u._version_is_newer('1.7.0','1.7.0'); assert u._tag_to_version('v1.8.0')=='1.8.0'; print('update logic OK')"
+          python -c "import sys; sys.path.insert(0, 'src'); from modules.update_helper.update_helper import _version_is_newer as v, _tag_to_version as t; assert v('1.8.0','1.7.0'); assert not v('1.7.0','1.7.0'); assert t('v1.8.0')=='1.8.0'; print('update logic OK')"

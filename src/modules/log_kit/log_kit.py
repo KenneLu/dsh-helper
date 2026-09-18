@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/log_kit/log_kit.py | TEMPLATE-VER: 1.0.0
+# TEMPLATE-FROM: my-diy-tool-template/modules/log_kit/log_kit.py | TEMPLATE-VER: 1.0.1
 """T12｜运行日志：RotatingFileHandler 单文件 1MB、保留 3 个滚存（总量 ~4MB 封顶）。
 
 参数与 reme-helper 的日志方案一致（house 标准 D13）：日志跟数据区走
@@ -8,7 +8,7 @@
 """
 import os
 
-from appconfig import APP_ID
+from modules.appconfig import APP_ID
 
 LOG_MAX_BYTES = 1 << 20      # 1 MB per file
 LOG_BACKUPS = 3              # <app>.log.1 ... .3

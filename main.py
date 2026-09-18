@@ -24,7 +24,8 @@ import psutil
 import pystray
 from PIL import Image, ImageDraw, ImageOps
 
-from modules import log_kit, paths, tray_kit, update_helper
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))   # src/modules 布局引导
+from modules import log_kit, paths, tray_kit, update_helper   # noqa: E402
 
 
 APP_NAME = "dsh-helper"

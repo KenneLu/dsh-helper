@@ -20,8 +20,8 @@ if not exist "%PY%" (
   exit /b 1
 )
 
-echo [GATE] py_compile main.py update_helper.py appconfig.py paths.py log_kit.py tray_kit.py ...
-"%PY%" -m py_compile main.py modules/update_helper.py appconfig.py modules/paths.py modules/log_kit.py modules/tray_kit.py
+echo [GATE] py_compile main.py + src/modules ...
+"%PY%" -m py_compile main.py src/modules/appconfig/appconfig.py src/modules/update_helper/update_helper.py src/modules/paths/paths.py src/modules/log_kit/log_kit.py src/modules/tray_kit/tray_kit.py
 if errorlevel 1 (
   echo [ERROR] compile gate failed.
   if /i not "%~1"=="nopause" pause
@@ -30,14 +30,16 @@ if errorlevel 1 (
 echo [GATE] template sync check ...
 "%PY%" ..\my-diy-tool-template\sync_check.py --roots dsh-helper
 if errorlevel 1 (
-  echo [ERROR] template drift detected. See _template/sync_check.py output above.
+  echo [ERROR] template drift detected. See my-diy-tool-template/sync_check.py output above.
   if /i not "%~1"=="nopause" pause
   exit /b 1
 )
 
-tasklist /fi "IMAGENAME eq %EXE%" 2>nul | find /i "%EXE%" >nul
+rem Running-instance check: prefix match on purpose - any version of the exe
+rem must block a build, not just the one this script would produce.
+tasklist /fo csv 2>nul | findstr /i /c:"dsh-helper" >nul
 if not errorlevel 1 (
-  echo [ERROR] %EXE% is running. Please exit the tray app first.
+  echo [ERROR] dsh-helper is running. Please exit the tray app first.
   if /i not "%~1"=="nopause" pause
   exit /b 1
 )
@@ -51,6 +53,7 @@ if exist "build\dist_tmp" rmdir /s /q "build\dist_tmp"
 echo [BUILD] PyInstaller onedir noconsole ...
 "%PY%" -m PyInstaller --noconfirm --clean --onedir --noconsole ^
   --name %PACKAGE% ^
+  --paths "%~dp0src" ^
   --distpath build\dist_tmp ^
   --workpath build\work ^
   --specpath build ^
