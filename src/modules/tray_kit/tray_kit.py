@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/tray_kit/tray_kit.py | TEMPLATE-VER: 2.0.0
+# TEMPLATE-FROM: my-diy-tool-template/modules/tray_kit/tray_kit.py | TEMPLATE-VER: 2.0.1
 """T7｜托盘机制件：单实例互斥体、退出请求文件 + 监视循环、面板地址行掩码、菜单签名重画、退出确认框（2.0.0）。
 
 蓝本：reme-helper（三循环/签名重画/退出纪律，执行文档 F13/D13/D14）与
@@ -57,7 +57,7 @@ def single_instance_free(mutex_name):
     return not already
 
 
-def confirm_quit_dialog(app_name, checkbox_text, checked_init, parent=None):
+def confirm_quit_dialog(app_name, checkbox_text, checked_init, parent=None, on_change=None):
     """退出确认 + 清理勾选对话框（G4.1 条款 4 / G4.2 条款 5；交互形态 = reme-helper 蓝本）。
 
     形态（家族标准，勿各自发挥）：标题 = app_name；正文「确定退出 <app_name>？
@@ -67,6 +67,8 @@ def confirm_quit_dialog(app_name, checkbox_text, checked_init, parent=None):
 
     parent：常驻 UI 线程的工具传 tk 父窗口；托盘菜单线程场景传 None（内部建临时
     Tk 根，wait_window 后销毁——对话框生命周期完全属于调用线程）。
+    on_change(bool)：勾选状态一变即回调（2026-09-18 用户定：持久化跟随勾选动作，
+    不等「退出」点击——点取消也已留存）。调用方在此落盘。
     返回 {"go": bool, "stop_service": bool}；取消返回 None。富对话框失败由调用方走
     降级链（原生 askyesno → 放行且默认不清理），本函数不吞异常。
     """
@@ -91,7 +93,9 @@ def confirm_quit_dialog(app_name, checkbox_text, checked_init, parent=None):
     opts = tk.Frame(win)
     opts.pack(anchor="w", padx=18, pady=(6, 0))
     var = tk.BooleanVar(master=win, value=result["stop_service"])
-    tk.Checkbutton(opts, text=checkbox_text, variable=var).pack(anchor="w")
+    _cb_cmd = (lambda: on_change(bool(var.get()))) if on_change else None
+    tk.Checkbutton(opts, text=checkbox_text, variable=var,
+                   command=_cb_cmd).pack(anchor="w")
     btns = tk.Frame(win)
     btns.pack(pady=(8, 12))
 

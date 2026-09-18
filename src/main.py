@@ -1294,8 +1294,14 @@ def quit_menu(icon, _item):
     # 原生也失败（纯托盘实例，唯一豁免）→ 放行退出且默认不清理。
     choice = None
     try:
+        def _persist_quit_stop(value: bool) -> None:
+            # G4.2 条款 5（2026-09-18 用户定）：勾选一变即持久化，不等「退出」点击
+            CFG["quit_stop_dsh"] = bool(value)
+            save_config()
+
         choice = tray_kit.confirm_quit_dialog(APP_NAME, "同时关闭当前 dsh 服务",
-                                     bool(CFG.get("quit_stop_dsh", False)))
+                                     bool(CFG.get("quit_stop_dsh", False)),
+                                     on_change=_persist_quit_stop)
     except Exception as exc:
         log(f"quit dialog failed ({type(exc).__name__}: {exc}); falling back to native confirm")
         try:
@@ -1312,10 +1318,7 @@ def quit_menu(icon, _item):
     if not choice or not choice.get("go"):
         log("quit cancelled by user")
         return
-    stop_dsh = bool(choice.get("stop_service"))
-    if CFG.get("quit_stop_dsh") != stop_dsh:
-        CFG["quit_stop_dsh"] = stop_dsh
-        save_config()
+    stop_dsh = bool(choice.get("stop_service"))   # 持久化已随勾选动作完成
     # G4.2 条款 4/5：服务放行是合法状态——只有勾选「同时停止」才停 dsh。
     current = state_copy()
     pids = set()
