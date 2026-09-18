@@ -20,10 +20,17 @@ if not exist "%PY%" (
   exit /b 1
 )
 
-echo [GATE] py_compile main.py update_helper.py ...
-"%PY%" -m py_compile main.py update_helper.py
+echo [GATE] py_compile main.py update_helper.py appconfig.py ...
+"%PY%" -m py_compile main.py update_helper.py appconfig.py
 if errorlevel 1 (
   echo [ERROR] compile gate failed.
+  if /i not "%~1"=="nopause" pause
+  exit /b 1
+)
+echo [GATE] template sync check ...
+"%PY%" ..\_template\sync_check.py --roots dsh-helper
+if errorlevel 1 (
+  echo [ERROR] template drift detected. See _template/sync_check.py output above.
   if /i not "%~1"=="nopause" pause
   exit /b 1
 )

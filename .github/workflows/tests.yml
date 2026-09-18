@@ -24,7 +24,7 @@ jobs:
           pip install psutil pystray pillow
 
       - name: Compile check
-        run: python -m py_compile main.py update_helper.py
+        run: python -m py_compile main.py update_helper.py appconfig.py
 
       - name: Import check (module-level config seed + menu data must not blow up)
         run: python -c "import main; print('import OK, VERSION =', main.VERSION)"

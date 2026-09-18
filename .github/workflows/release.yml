@@ -44,7 +44,7 @@ jobs:
           Write-Host "version=$version"
 
       - name: Compile gate
-        run: python -m py_compile main.py update_helper.py
+        run: python -m py_compile main.py update_helper.py appconfig.py
 
       # CI 上没有 dsh.cmd，--smoke 门禁只在本机 build.bat 里跑；
       # 这里用"能构建 + exe 存在"作为最低门禁。
