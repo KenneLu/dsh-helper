@@ -3,18 +3,32 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
+## 1.8.1
+
+- Internal structure: family template modules now live under
+  `modules/` (imports via `from modules import ...`); sync_check and CI
+  compile lists updated.
+- Icons (G5): tray/taskbar/exe icons are now derived at build time from
+  `resources/img/dsh-helper-icon.png` via `src/icons.py` (dual ico, 15-frame
+  taskbar table for 100%-200% DPI) - the exe no longer ships the default
+  PyInstaller icon.
+- Quit (G4.1-4/G4.2-5): exiting the tray now asks for confirmation (red
+  confirm button, cancel has default focus, Esc/close = cancel). A persistent
+  "also stop the dsh service" checkbox (default off - dsh is released and
+  keeps running) is saved the moment it is toggled. Previously quit silently
+  killed the managed dsh.
+- Build: release layout is now `release\dsh-helper-<ver>\` (exe carries no
+  version); frozen smoke + deliverable checks are part of the gate; the CI
+  release workflow runs the same build.bat chain (smoke skipped on CI - no
+  dsh.cmd on runners); the smoke run's data root is redirected so builds
+  never touch the developer's live config/log.
+
 ## 1.8.0
 
 - Internal refactor (no behavior change): config/log/update paths now come from
   a `paths.py` module, rotating logging via `log_kit.py`, and the single-instance
   guard / URL masking via `tray_kit.py` - all byte-identical copies of the family
   template modules (my-diy-tool-template), verified by the build's sync_check gate.
-
-## 1.8.1
-
-- Internal structure only: family template modules now live under
-  `modules/` (imports via `from modules import ...`); sync_check and CI
-  compile lists updated. No behavior change.
 
 ## Unreleased
 

@@ -1,4 +1,4 @@
-# dsh-helper v1.8.0
+# dsh-helper v1.8.1
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -76,14 +76,13 @@ An empty `dsh_cmd` means dsh is not configured yet. It is auto-detected on first
 
 ## Packaging
 
-Uses a fixed Python and PyInstaller:
+Uses a fixed Python interpreter and PyInstaller (set via the `PY` variable at the top of `build.bat`):
 
 ```text
-H:\Tools\Python\Python313\python.exe
 build.bat nopause
 ```
 
-`build.bat` runs a compile gate, builds an `onedir/noconsole` package, then runs `--smoke` to verify the dsh command and port decision (fixed port when free, otherwise automatic fallback). Historical packages stay in `out\`.
+`build.bat` runs a compile gate, builds an `onedir/noconsole` package into `release\dsh-helper-<version>\`, then runs `--smoke` to verify the dsh command and port decision (fixed port when free, otherwise automatic fallback). Each version builds into its own folder; an existing folder makes the build fail so every package is reproducible.
 
 Official releases are built by CI: push a `v<semver>` tag (e.g. `v1.7.0`) and the release workflow publishes a zip + sha256 on GitHub Releases — the same layout the in-app updater consumes. The shipped exe is named `dsh-helper.exe` without a version (the autostart registry stores the full path; versions live in the zip/folder names).
 
@@ -93,7 +92,7 @@ Official releases are built by CI: push a `v<semver>` tag (e.g. `v1.7.0`) and th
 - **URL changed after starting**: with the default fixed 3080 it no longer changes; only a fallback to an automatic port changes it — use "Copy panel URL" for the latest address (the notification and log explain the fallback).
 - **Want a fixed address**: 3080 is fixed by default; to change it, set `config.json`'s `port` to a free port outside 49152–65535.
 - **DSH 0.1.2+ token URLs**: never hand-edit `?token=...` out of the URL; a fresh token is generated on each restart.
-- **What happens to dsh on Quit**: Quit stops dsh gracefully first (up to 8 s) so plugins dispose and sessions flush, then exits the tray. During those 8 seconds the status line shows "Stopping", the icon turns grey, and Start/Stop/Restart/Quit are all disabled — intentional; let it finish.
+- **What happens to dsh on Quit**: Quit first opens a confirm dialog with a "Also stop the current dsh service" checkbox. The choice is remembered the moment you toggle it (default: off — dsh keeps running after the tray exits; that is a normal, healthy state and the tray re-adopts the service on its next start). If the checkbox is on, dsh is stopped gracefully first (up to 8 s) so plugins dispose and sessions flush, then the tray exits. During those 8 seconds the status line shows "Stopping", the icon turns grey, and Start/Stop/Restart/Quit are all disabled — intentional; let it finish.
 - **Autostart unchecked but the registry entry exists**: the Run key does not point at this exact program (the package folder moved, or the old package was deleted). The checkbox means "it will actually start next boot, and it will be this one" — so unchecked is honest. Click "Autostart" once to overwrite with the current path. The program never edits the registry on its own.
 - **A notice says "already running" after double-clicking**: one tray instance is already alive (the whale in the notification area); the single-instance guard cancelled this launch.
 - **Correct order when switching versions**: quit the old instance before starting the new package. The mutex name is fixed and version-less, so all versions from 1.5 on mutually block across versions — starting a new package while an old one runs shows "already running". Versions 1.4 and earlier have no guard. Since 1.7.0, the in-app updater handles this: quit the tray and it swaps and restarts for you.
