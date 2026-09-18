@@ -44,15 +44,16 @@ jobs:
           Write-Host "version=$version"
 
       - name: Compile gate
-        run: python -m py_compile src/main.py src/modules/appconfig/appconfig.py src/modules/update_helper/update_helper.py src/modules/paths/paths.py src/modules/log_kit/log_kit.py src/modules/tray_kit/tray_kit.py
+        run: python -m py_compile src/main.py src/icons.py src/modules/appconfig/appconfig.py src/modules/update_helper/update_helper.py src/modules/paths/paths.py src/modules/log_kit/log_kit.py src/modules/tray_kit/tray_kit.py
 
-      # CI 上没有 dsh.cmd，--smoke 门禁只在本机 build.bat 里跑；
-      # 这里用"能构建 + exe 存在"作为最低门禁。
       # Same chain as the local build.bat: gates + PyInstaller + release layout
-      # (release\<name>-<ver>\<name>.exe, exe carries no version - B3) + frozen smoke.
+      # (release\<name>-<ver>\<name>.exe, exe carries no version - B3).
+      # nosmoke: the frozen smoke gate validates the real dsh.cmd, which CI
+      # runners don't have - skipped here per the "CI-unavailable resource is
+      # explicitly skipped, reason stated" rule (G3); local builds keep it ON.
       - name: Build release
         shell: cmd
-        run: build.bat norun nopause
+        run: build.bat norun nopause nosmoke
 
       - name: Package zip
         shell: pwsh

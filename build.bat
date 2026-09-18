@@ -5,18 +5,22 @@ cd /d "%~dp0"
 rem ---------------------------------------------------------------------------
 rem dsh-helper build: gates -> PyInstaller -> release\<name>-<ver>\ -> frozen smoke
 rem ASCII-only: cmd.exe parses .bat with the machine ANSI code page.
-rem Usage: build.bat [norun] [nopause]
+rem Usage: build.bat [norun] [nopause] [nosmoke]
 rem   norun    do not start the built exe (starting it is the default)
 rem   nopause  unattended (no "press any key") - used by CI
+rem   nosmoke  skip the frozen smoke gate (CI: runners have no dsh.cmd;
+rem            local builds keep the smoke gate ON)
 rem ---------------------------------------------------------------------------
 
 set RUN_AFTER=1
 set NOPAUSE=
+set NOSMOKE=
 set BUILD_ARGS=%*
 if not defined BUILD_ARGS goto :args_done
 for %%a in (%BUILD_ARGS%) do (
   if /i "%%a"=="norun" set RUN_AFTER=
   if /i "%%a"=="nopause" set NOPAUSE=1
+  if /i "%%a"=="nosmoke" set NOSMOKE=1
 )
 :args_done
 
@@ -61,8 +65,8 @@ if not errorlevel 1 (
   exit /b 1
 )
 
-echo [GATE] py_compile src\main.py + src\modules ...
-"%PY%" -m py_compile src\main.py src\modules\appconfig\appconfig.py src\modules\update_helper\update_helper.py src\modules\paths\paths.py src\modules\log_kit\log_kit.py src\modules\tray_kit\tray_kit.py
+echo [GATE] py_compile src\main.py + src\icons.py + src\modules ...
+"%PY%" -m py_compile src\main.py src\icons.py src\modules\appconfig\appconfig.py src\modules\update_helper\update_helper.py src\modules\paths\paths.py src\modules\log_kit\log_kit.py src\modules\tray_kit\tray_kit.py
 if errorlevel 1 (
   echo [ERROR] compile gate failed.
   if not defined NOPAUSE pause
@@ -136,18 +140,32 @@ if not exist "%RELEASE_DIR%\_internal\%APPNAME%-taskbar.ico" (
   if not defined NOPAUSE pause
   exit /b 1
 )
+if not exist "%RELEASE_DIR%\config.json" (
+  echo [ERROR] factory config.json missing from the release.
+  if not defined NOPAUSE pause
+  exit /b 1
+)
 
 set "PYTHONUTF8=1"
+if defined NOSMOKE goto :smoke_done
+rem Instance isolation (F11/D12): the smoke run must not read or rewrite the
+rem developer's live AppData config/log - redirect the whole data root into
+rem the release dir, which is cleaned up right after the smoke.
+set "DSH_HELPER_DATA_DIR=%RELEASE_DIR%\smoke-data"
 echo [TEST] frozen smoke ...
 "%FROZEN_EXE%" --smoke
 if errorlevel 1 (
-  echo [ERROR] smoke test failed. See %RELEASE_DIR%\log
+  echo [ERROR] smoke test failed. See %RELEASE_DIR%\smoke-data\log
   if not defined NOPAUSE pause
   exit /b 1
 )
 type "%RELEASE_DIR%\smoke.log" 2>nul
 if exist "%RELEASE_DIR%\smoke.log" del /q "%RELEASE_DIR%\smoke.log"
-if exist "%RELEASE_DIR%\log" rmdir /s /q "%RELEASE_DIR%\log"
+if exist "%RELEASE_DIR%\smoke-data" rmdir /s /q "%RELEASE_DIR%\smoke-data"
+goto :smoke_next
+:smoke_done
+echo [SKIP] frozen smoke skipped (nosmoke): CI runners have no dsh.cmd to validate.
+:smoke_next
 
 echo.
 echo [DONE] release: %FROZEN_EXE%
