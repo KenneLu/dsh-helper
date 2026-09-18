@@ -24,19 +24,16 @@ import psutil
 import pystray
 from PIL import Image, ImageDraw, ImageOps
 
-import log_kit
-import paths
-import tray_kit
-import update_helper
+from modules import log_kit, paths, tray_kit, update_helper
 
 
 APP_NAME = "dsh-helper"
-VERSION = "1.8.0"
+VERSION = "1.8.1"
 APP_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 # 用户数据区/配置/日志/更新暂存：唯一出处是 T2 paths（数据区住 LOCALAPPDATA，
 # 1.6 及以前的 exe 旁旧配置由播种自动迁入）。
-from paths import (CONFIG_PATH, LEGACY_CONFIG_PATH, LOG_DIR, LOG_PATH,
-                   UPDATE_DIR, USER_DATA_DIR)
+from modules.paths import (CONFIG_PATH, LEGACY_CONFIG_PATH, LOG_DIR, LOG_PATH,
+                           UPDATE_DIR, USER_DATA_DIR)
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 URL_RE = re.compile(r"https?://(?:127\.0\.0\.1|localhost):([0-9]{1,5})(?:/[^\s]*)?", re.I)
 

@@ -10,6 +10,12 @@ The tagging convention matches the versions in this file.
   guard / URL masking via `tray_kit.py` - all byte-identical copies of the family
   template modules (my-diy-tool-template), verified by the build's sync_check gate.
 
+## 1.8.1
+
+- Internal structure only: family template modules now live under
+  `modules/` (imports via `from modules import ...`); sync_check and CI
+  compile lists updated. No behavior change.
+
 ## Unreleased
 
 - Bilingual README (baseline 8): `README.md` is now the English canonical
