@@ -73,13 +73,21 @@ if errorlevel 1 (
   exit /b 1
 )
 
+rem sync_check gate: the template repo only exists on dev machines (CI checks
+rem out a single repo) - skipped there like nosmoke, local builds keep it ON.
+if not exist "..\my-diy-tool-template\sync_check.py" goto :sync_skip
 echo [GATE] template sync check ...
 "%PY%" ..\my-diy-tool-template\sync_check.py --roots dsh-helper
-if errorlevel 1 (
-  echo [ERROR] template drift detected. See my-diy-tool-template/sync_check.py output above.
-  if not defined NOPAUSE pause
-  exit /b 1
-)
+if errorlevel 1 goto :sync_fail
+goto :sync_done
+:sync_skip
+echo [SKIP] template sync check: my-diy-tool-template not present (CI single-repo checkout)
+goto :sync_done
+:sync_fail
+echo [ERROR] template drift detected. See my-diy-tool-template/sync_check.py output above.
+if not defined NOPAUSE pause
+exit /b 1
+:sync_done
 
 echo [BUILD] icon ...
 "%PY%" src\icons.py
