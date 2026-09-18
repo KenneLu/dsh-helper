@@ -1,0 +1,8 @@
+{
+  "dsh_cmd": "",
+  "host": "127.0.0.1",
+  "port": 3080,
+  "status_refresh_interval_sec": 60,
+  "start_on_launch": false,
+  "autostart": false
+}

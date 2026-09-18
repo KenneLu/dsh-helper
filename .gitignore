@@ -1,4 +1,4 @@
-# 构建产物
+# Build artifacts
 build/
 dist/
 out/
@@ -7,8 +7,12 @@ __pycache__/
 *.pyc
 *.spec
 
-# 运行产物（数据区在 %LOCALAPPDATA%\dsh-helper\，这些是历史遗留/本地调试）
+# Generated icons (src/icons.py derives them at build time - G5: keep
+# generated binaries out of git; the hand-made png lives in resources/img/)
+dsh-helper.ico
+dsh-helper-taskbar.ico
+
+# Runtime leftovers (user data lives in %LOCALAPPDATA%\dsh-helper\)
 log/
 smoke.log
-config.json
 build_out.log

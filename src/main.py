@@ -147,6 +147,9 @@ def save_config():
                     "status_refresh_interval_sec": current_status_refresh_interval(),
                     "start_on_launch": bool(CFG.get("start_on_launch", False)),
                     "autostart": bool(CFG.get("autostart", False)),
+                    # G4.2 条款 5：退出清理勾选必须随 save_config 落盘——
+                    # on_change 即勾即存走的就是这里，漏键 = 持久化静默失效。
+                    "quit_stop_dsh": bool(CFG.get("quit_stop_dsh", False)),
                 },
                 ensure_ascii=False,
                 indent=2,
