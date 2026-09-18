@@ -18,29 +18,25 @@ from tkinter import filedialog
 import urllib.error
 import urllib.request
 import webbrowser
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import psutil
 import pystray
 from PIL import Image, ImageDraw, ImageOps
 
+import log_kit
+import paths
+import tray_kit
 import update_helper
 
 
 APP_NAME = "dsh-helper"
-VERSION = "1.7.0"
+VERSION = "1.8.0"
 APP_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-# 用户数据区住 LOCALAPPDATA（house 标准 D13）：exe 旁的文件运行时被锁、更新时整目录
-# 替换会误伤；1.6 及以前配置/日志在 exe 旁，首次运行由 _seed_config_from_legacy 迁入。
-USER_DATA_DIR = Path(
-    os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share"
-) / APP_NAME
-CONFIG_PATH = USER_DATA_DIR / "config.json"
-LEGACY_CONFIG_PATH = APP_DIR / "config.json"
-LOG_DIR = USER_DATA_DIR / "log"
-LOG_PATH = LOG_DIR / "dsh-helper.log"
-UPDATE_DIR = USER_DATA_DIR / "update"
+# 用户数据区/配置/日志/更新暂存：唯一出处是 T2 paths（数据区住 LOCALAPPDATA，
+# 1.6 及以前的 exe 旁旧配置由播种自动迁入）。
+from paths import (CONFIG_PATH, LEGACY_CONFIG_PATH, LOG_DIR, LOG_PATH,
+                   UPDATE_DIR, USER_DATA_DIR)
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 URL_RE = re.compile(r"https?://(?:127\.0\.0\.1|localhost):([0-9]{1,5})(?:/[^\s]*)?", re.I)
 
@@ -101,33 +97,15 @@ DEFAULT_CONFIG = {
 }
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
-# 日志轮转（house 标准 D13）：单文件 1MB、保留 3 个滚存，总量 ~4MB 封顶
-_LOG_HANDLER = RotatingFileHandler(LOG_PATH, maxBytes=1 << 20, backupCount=3, encoding="utf-8")
-_LOG_HANDLER.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[_LOG_HANDLER],
-)
+_logger = log_kit.get_logger(LOG_DIR)   # T12：滚动 1MB×3（house 标准 D13）
 
 
 def log(message):
-    logging.info(message)
-
-
-def _seed_config_from_legacy():
-    """1.6 及以前配置在 exe 旁；首次运行一次性迁到用户数据区。"""
-    if CONFIG_PATH.exists() or not LEGACY_CONFIG_PATH.exists():
-        return
-    try:
-        USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(LEGACY_CONFIG_PATH, CONFIG_PATH)
-        log(f"config migrated: {LEGACY_CONFIG_PATH} -> {CONFIG_PATH}")
-    except OSError as exc:
-        log(f"config migrate failed: {exc}")
+    _logger.info(message)
 
 
 def load_config():
-    _seed_config_from_legacy()
+    paths.seed_config()   # T2：exe 旁旧配置一次性迁入用户数据区
     config = {}
     if CONFIG_PATH.exists():
         try:
@@ -924,12 +902,8 @@ def status_line():
 
 
 def display_url(url):
-    """菜单展示用：token 全掩码（执行文档 D11 方案 A）——让人知道有 token 但看不到内容。
-
-    掩码只作用于展示面；完整地址的唯一入口是紧挨着地址行的「复制面板地址」，
-    复制行为不受影响。日志仍保留完整 URL 供本机诊断。
-    """
-    return re.sub(r"([?&])token=[^&]*", lambda m: m.group(1) + "token=••••••", url)
+    """菜单展示用：token 全掩码（T7/D11）。完整地址唯一入口 = 复制面板地址。"""
+    return tray_kit.mask_token(url)
 
 
 def url_line():
@@ -1520,65 +1494,17 @@ def smoke():
         return 1
 
 
-# ---- 单实例：重复双击不再多开一个托盘 ------------------------------------
-#
-# 旧行为是每双击一次就多一个托盘图标：多个图标各自监控同一台 dsh，状态显示互相矛盾，
-# 而且每个实例的「退出」都会先停 dsh —— 想清掉多余图标反而会顺手把 dsh 关掉。
-# 这里用命名互斥体把进程数钉在 1 个。互斥体由内核管理，进程消失即自动释放，
-# 不需要清理逻辑，也不会留下要手工删的陈旧锁。
-
-MUTEX_NAME = r"Local\dsh-helper-single-instance"
-_MUTEX_HANDLE = None
-
-
-def acquire_single_instance():
-    """拿到单实例互斥体返回 True；已有实例在跑返回 False。"""
-    global _MUTEX_HANDLE
-    if os.name != "nt":
-        return True
-    import ctypes
-    from ctypes import wintypes
-
-    ERROR_ALREADY_EXISTS = 183
-    try:
-        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
-        k32.CreateMutexW.restype = wintypes.HANDLE
-        handle = k32.CreateMutexW(None, False, MUTEX_NAME)
-        if not handle:
-            raise OSError(f"CreateMutexW failed err={ctypes.get_last_error()}")
-        if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
-            k32.CloseHandle(handle)
-            return False
-        _MUTEX_HANDLE = handle  # 故意持有到进程结束，不能提前关闭
-        return True
-    except Exception as exc:
-        # 守卫自身失败时放行：宁可多开一个托盘，也不能让用户打不开程序。
-        log(f"single-instance guard unavailable ({exc}); continuing")
-        return True
-
-
-def show_already_running_notice():
-    """本程序是无 console 的托盘程序，print 没人看得见，所以用弹窗。"""
-    try:
-        import ctypes
-
-        ctypes.windll.user32.MessageBoxW(
-            None,
-            f"{APP_NAME} 已经在运行了。\n\n"
-            f"请看任务栏右下角通知区域里的鲸鱼图标。\n本次启动已取消，不会多开一个托盘。",
-            f"{APP_NAME} v{VERSION}",
-            0x40,  # MB_OK | MB_ICONINFORMATION
-        )
-    except Exception as exc:
-        log(f"already-running notice failed: {exc}")
+# ---- 单实例：命名互斥体（T7 tray_kit；名字不含版本号，跨版本互拦） ----------
+# 旧行为是每双击一次就多一个托盘图标：多个图标各自监控同一台 dsh，状态互相矛盾，
+# 而且每个实例的「退出」都会先停 dsh。互斥体由内核管理，进程消失即自动释放。
 
 
 def main():
     global TRAY_ICON
-    if not acquire_single_instance():
+    if not tray_kit.acquire_single_instance("dsh-helper", log=log):
         log("another instance is already running; exiting")
-        show_already_running_notice()
+        tray_kit.warn_duplicate_instance(APP_NAME,
+                                         hint="请看任务栏右下角通知区域里的鲸鱼图标，本次启动已取消，不会多开一个托盘。")
         return
     log(f"startup {APP_NAME} v{VERSION} (pid {os.getpid()})")
     needs_command_detection = command_needs_startup_detection()

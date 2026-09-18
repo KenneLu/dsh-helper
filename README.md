@@ -1,4 +1,4 @@
-# dsh-helper v1.7.0
+# dsh-helper v1.8.0
 
 **English** | [简体中文](README.zh-CN.md)
 

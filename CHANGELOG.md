@@ -3,6 +3,13 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
+## 1.8.0
+
+- Internal refactor (no behavior change): config/log/update paths now come from
+  a `paths.py` module, rotating logging via `log_kit.py`, and the single-instance
+  guard / URL masking via `tray_kit.py` - all byte-identical copies of the family
+  template modules (my-diy-tool-template), verified by the build's sync_check gate.
+
 ## Unreleased
 
 - Bilingual README (baseline 8): `README.md` is now the English canonical

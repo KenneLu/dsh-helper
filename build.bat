@@ -20,8 +20,8 @@ if not exist "%PY%" (
   exit /b 1
 )
 
-echo [GATE] py_compile main.py update_helper.py appconfig.py ...
-"%PY%" -m py_compile main.py update_helper.py appconfig.py
+echo [GATE] py_compile main.py update_helper.py appconfig.py paths.py log_kit.py tray_kit.py ...
+"%PY%" -m py_compile main.py update_helper.py appconfig.py paths.py log_kit.py tray_kit.py
 if errorlevel 1 (
   echo [ERROR] compile gate failed.
   if /i not "%~1"=="nopause" pause
