@@ -4,6 +4,19 @@ All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
 ## Unreleased
+- **Quit no longer fails closed when the dialog chain is unavailable** (2026-09-19 defect: the
+  tool could not be exited at all, only killed from Task Manager). `tkinter.Tk()` raising
+  `TclError` - a hollowed `_internal/`, i.e. no usable `init.tcl` - made both the rich dialog and
+  the native `askyesno` fallback fail, and the old code folded "chain unavailable" (`None`) and
+  "user cancelled" (`{"go": False}`) into a single `return`: a broken dialog chain therefore
+  silently cancelled the quit. The decision is now three-way - user said yes / user cancelled /
+  chain unavailable - and the third one logs one line and **quits normally with the dsh service
+  left running**. This is not a default-yes: the confirmation dialog is untouched and an explicit
+  cancel still does not quit. Regression: `tests/test_quit_fail_open.py`, verified red against the
+  pre-fix code, gated by `build.bat`.
+  **Absorption obligation (a registration, not an exemption):** this is a local, inline fix; once
+  `tray_kit` ships a unified fail-open quit form, switch to calling the shared module (per B4
+  principle 3).
 - **Registered: `modules/service_link` is an evaluated, inline-equivalent difference - a form gap, not a capability gap**
   (lead ruling: keep the inline form now, evaluate adoption next round). The template module is a
   single-object ownership state machine (`refresh` / `can_start` / `start` / `stop` / `state` /

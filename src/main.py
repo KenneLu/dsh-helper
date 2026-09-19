@@ -1417,44 +1417,59 @@ def quit_menu(icon, _item):
         return
     # G4.1 条款 4：退出必须过确认框；取消/关窗不退出。降级链（G4.1 × G4.2 互补，
     # 禁止跳过确认）：富对话框失败 → 原生 askyesno（清理按持久化配置）→
-    # 原生也失败（纯托盘实例，唯一豁免）→ 放行退出且默认不清理。
-    choice = None
-    try:
-        def _persist_quit_stop(value: bool) -> None:
-            # G4.2 条款 5（2026-09-18 用户定）：勾选一变即持久化，不等「退出」点击
-            CFG["quit_stop_dsh"] = bool(value)
-            save_config()
+    # 弹窗链路整个不可用（唯一豁免）→ 放行退出且不碰 dsh。
+    def _decide_quit():
+        """退出确认裁决 → (proceed, stop_service)。**三态必须分开**。
 
-        # 确认框要建 Tk 根 → 封送到唯一的 Tk 线程（E1-03/I-03）。
-        # 降级链两级都在里面跑：富对话框失败就走原生 askyesno（同样在那一个线程上）。
-        def _confirm():
-            try:
-                return tray_kit.confirm_quit_dialog(APP_NAME, i18n.t("quit_checkbox"),
-                                                    bool(CFG.get("quit_stop_dsh", False)),
-                                                    on_change=_persist_quit_stop)
-            except Exception as exc:
-                log(f"quit dialog failed ({type(exc).__name__}: {exc}); "
-                    f"falling back to native confirm")
-            try:
-                import tkinter as _tk
-                from tkinter import messagebox as _mb
-                _root = _tk.Tk()
-                _root.withdraw()
-                _go = bool(_mb.askyesno(APP_NAME, i18n.t("quit_native_text")))
-                _root.destroy()
-                return {"go": _go, "stop_service": bool(CFG.get("quit_stop_dsh", False))}
-            except Exception as exc2:
-                log(f"native confirm failed ({type(exc2).__name__}: {exc2}); "
-                    f"proceeding without confirmation (dsh untouched by default)")
-                return None
+        2026-09-19 缺陷：链路不可用（None）与用户明确取消（{"go": False}）共用一个
+        `return`，于是弹窗一坏用户就被锁死在工具里——ocx 1.2.2 实证：_internal 目录
+        被掏空、Tk 读不到 init.tcl，点「退出」静默无反应，只能用任务管理器。
+        「不可用 ⇒ 放行」不等于「默认 True」：确认框本身没被拆掉，问到就一定听用户的。
+        """
+        try:
+            def _persist_quit_stop(value: bool) -> None:
+                # G4.2 条款 5（2026-09-18 用户定）：勾选一变即持久化，不等「退出」点击
+                CFG["quit_stop_dsh"] = bool(value)
+                save_config()
 
-        choice = ui_post(_confirm)
-    except Exception as exc:
-        log(f"quit confirm could not be marshalled ({type(exc).__name__}: {exc})")
-    if not choice or not choice.get("go"):
-        log("quit cancelled by user")
+            # 确认框要建 Tk 根 → 封送到唯一的 Tk 线程（E1-03/I-03）。
+            # 降级链两级都在里面跑：富对话框失败就走原生 askyesno（同样在那一个线程上）。
+            def _confirm():
+                try:
+                    return tray_kit.confirm_quit_dialog(APP_NAME, i18n.t("quit_checkbox"),
+                                                        bool(CFG.get("quit_stop_dsh", False)),
+                                                        on_change=_persist_quit_stop)
+                except Exception as exc:
+                    log(f"quit dialog failed ({type(exc).__name__}: {exc}); "
+                        f"falling back to native confirm")
+                try:
+                    import tkinter as _tk
+                    from tkinter import messagebox as _mb
+                    _root = _tk.Tk()
+                    _root.withdraw()
+                    _go = bool(_mb.askyesno(APP_NAME, i18n.t("quit_native_text")))
+                    _root.destroy()
+                    return {"go": _go, "stop_service": bool(CFG.get("quit_stop_dsh", False))}
+                except Exception as exc2:
+                    # Tk 运行时缺失 / 会话不可交互：这**不是**用户作答，交给调用方放行。
+                    log(f"native confirm failed ({type(exc2).__name__}: {exc2})")
+                    return None
+
+            choice = ui_post(_confirm)
+        except Exception as exc:
+            log(f"quit confirm could not be marshalled ({type(exc).__name__}: {exc})")
+            return True, False         # 链路不可用 ⇒ 放行退出，服务不动
+        if choice is None:
+            log("quit confirm unavailable; quitting without stopping the service")
+            return True, False         # 同上：弹窗链路整个不可用
+        if not choice.get("go"):
+            log("quit cancelled by user")
+            return False, False        # 用户明确取消 ⇒ 不退出（确认框照旧有效）
+        return True, bool(choice.get("stop_service"))
+
+    _proceed, stop_dsh = _decide_quit()   # 持久化已随勾选动作完成
+    if not _proceed:
         return
-    stop_dsh = bool(choice.get("stop_service"))   # 持久化已随勾选动作完成
     # G4.2 条款 4/5：服务放行是合法状态——只有勾选「同时停止」才停 dsh。
     current = state_copy()
     pids = set()

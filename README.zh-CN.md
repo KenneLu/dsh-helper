@@ -102,9 +102,10 @@ build.bat nopause
 - **稳定安装位（§G4.1-1）—— 只做了"优先指向"，机制本身仍未实现**：`paths.INSTALL_DIR`/`INSTALL_EXE`（`%LOCALAPPDATA%\dsh-helper\app\`）已定义、自启也优先指向它，但没有任何流程把版本装进稳定位（更新器仍是原地替换当前包）。在今天这台机器这种"稳定位不存在"的常态下，`get_autostart_cmd()` 会退回**带版本号**的 `release\dsh-helper-<版本>\dsh-helper.exe`——该目录一变/被删，Run 键仍会暂时指向失效路径，直到下次启动自愈。完整 G4.1-1（更新器把版本装进稳定位）仍是待办。
 - **i18n 覆盖（§T1）—— 已实现，附具名残留**：模块已采纳，`--lang-audit` 对 `src/main.py` 报 0 条表外中文，本工具全部菜单/通知/弹窗/状态行/校验与错误信息均已翻译。残留：审计只扫 `src/main.py`，其他文件产出的文案（如 `tray_kit` 在未传参时自带的对话框中文、Python/Tk 异常串）不在覆盖内；未走 `i18n.t()` 的一律回落中文——如实登记，不假装全覆盖。
 - **设置窗口（§T3）**：偏好项（自启、启动时启动、刷新间隔、退出清理）只存在于托盘菜单，没有统一设置对话框。
-- **`tests/` 与 `release.bat`**：两者都缺。唯一的业务检查是 `build.bat` 里的冻结 `--smoke`，且没有任何断言（D1-05/D3-02）。
+- **`release.bat`**：不存在。`tests/` 已存在（2026-09-19）——`tests/test_*.py` 覆盖单实例守卫、真实启动路径、语言切换菜单刷新、更新链、UI 封送与退出 fail-open 路径，且 `build.bat` 把**每一个**都当门禁跑，冻结的 `--smoke` 不再是唯一业务检查。
 - **更新 pending 幂等（§G4-02）**：`paths.process_pending_update()` 已存在但未接入启动流程，中断的换装不会重试。
 - **`service_link`（§G4.2 参考状态机）**：模板已提供 `modules/service_link`（NONE → ADOPTED/OWNED → NONE），dsh-helper 仍是内联实现接入与停止。行为通过评审，但未采纳共享状态机。
+- **退出路径 fail-open（§G4.1-4 / T7）—— 过渡版内联形态，待吸收模板件**：弹窗链路不可用时（`Tk()` 抛 `TclError`，例如 `_internal/` 被掏空），`quit_menu` 记一行日志后按 `quit_stop_dsh=False` 照常退出，不再静默拒绝退出。它**刻意**是 `quit_menu` 内的本地三态裁决；义务是待 `tray_kit` 提供统一形态后改为调用共享件（见 CHANGELOG `## Unreleased`）。
 
 ## 常见问题
 
