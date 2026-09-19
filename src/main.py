@@ -24,11 +24,11 @@ import psutil
 import pystray
 from PIL import Image, ImageDraw, ImageOps
 
-from modules import autostart, log_kit, paths, tray_kit, update_helper   # noqa: E402
+from modules import autostart, i18n, log_kit, paths, tray_kit, update_helper   # noqa: E402
 
 
 APP_NAME = "dsh-helper"
-VERSION = "1.8.2"
+VERSION = "1.8.1"
 APP_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 # 用户数据区/配置/日志/更新暂存：唯一出处是 T2 paths（数据区住 LOCALAPPDATA，
 # 1.6 及以前的 exe 旁旧配置由播种自动迁入）。
@@ -72,11 +72,11 @@ ICON_ASSET = resource_path("resources/img/dsh-helper-icon.png")
 _ICON_BASE = None
 
 STATUS_REFRESH_INTERVAL_CHOICES = (
-    (5, "5秒"),
-    (20, "20秒"),
-    (60, "1分钟"),
-    (300, "5分钟"),
-    (600, "10分钟"),
+    (5, "interval_5s"),
+    (20, "interval_20s"),
+    (60, "interval_1m"),
+    (300, "interval_5m"),
+    (600, "interval_10m"),
 )
 STATUS_REFRESH_INTERVAL_VALUES = {seconds for seconds, _label in STATUS_REFRESH_INTERVAL_CHOICES}
 DEFAULT_STATUS_REFRESH_INTERVAL_SEC = 60
@@ -136,6 +136,8 @@ def load_config():
 
 
 CFG = load_config()
+# T5：语言在配置读取之后、任何 t() 之前初始化（auto 跟随 Windows UI 语言）。
+i18n.init(i18n.load_language_from_config(CONFIG_PATH))
 
 
 def save_config():
@@ -302,7 +304,7 @@ def resolve_launch_port():
         return "0", ""
     if port_is_available(host, requested):
         return str(requested), ""
-    note = f"端口 {requested} 已被占用，本次改用自动端口"
+    note = i18n.t("err_port_busy_note", requested)
     log(f"configured port {requested} unavailable on {host}: fallback to auto port")
     return "0", note
 
@@ -466,14 +468,14 @@ def build_dsh_command():
     global LAUNCH_PORT_NOTE
     candidate = configured_dsh_command_path()
     if candidate is None:
-        raise DshCommandError("尚未配置 dsh.cmd 路径", "missing")
+        raise DshCommandError(i18n.t("err_cmd_not_set"), "missing")
     if candidate.name.casefold() != "dsh.cmd":
-        raise DshCommandError("配置文件中的文件名不是 dsh.cmd", "invalid")
+        raise DshCommandError(i18n.t("err_cmd_name"), "invalid")
     try:
         if not candidate.is_file():
-            raise DshCommandError("配置的 dsh.cmd 文件不存在", "invalid")
+            raise DshCommandError(i18n.t("err_cmd_not_exist"), "invalid")
     except OSError as exc:
-        raise DshCommandError(f"无法读取配置的 dsh.cmd：{exc}", "invalid") from exc
+        raise DshCommandError(i18n.t("err_cmd_unreadable", exc), "invalid") from exc
 
     command = str(candidate)
     host = str(CFG.get("host", "127.0.0.1"))
@@ -625,9 +627,9 @@ def report_command_configuration_error(detail, status="invalid"):
         last_output=[],
     )
     if status == "missing":
-        notify("尚未配置 dsh.cmd，请执行自动检测或选择路径")
+        notify(i18n.t("notify_cmd_missing"))
     else:
-        notify("dsh.cmd 路径异常，请检查路径或执行自动检测")
+        notify(i18n.t("notify_cmd_invalid"))
     update_menu()
 
 
@@ -637,7 +639,7 @@ def report_runtime_start_failure(command_path, detail):
     valid, validation_detail = validate_dsh_command(command_path)
     MANAGED_PROCESS = None
     if not valid:
-        message = f"dsh.cmd 校验失败：{validation_detail}"
+        message = i18n.t("notify_cmd_validate_failed", validation_detail)
         set_state(
             phase="error",
             pid=None,
@@ -647,9 +649,9 @@ def report_runtime_start_failure(command_path, detail):
             last_output=[],
         )
         log(f"dsh command became invalid after start failure: {message}")
-        notify("dsh.cmd 启动失败，请检查路径或执行自动检测")
+        notify(i18n.t("notify_cmd_start_failed"))
     else:
-        message = f"dsh Web 启动失败：{detail}"
+        message = i18n.t("notify_web_start_failed", detail)
         set_state(
             phase="error",
             pid=None,
@@ -686,14 +688,14 @@ def refresh_state():
             elif current.get("phase") == "starting":
                 set_state(phase="starting", pid=proc.pid, managed=True)
             else:
-                set_state(phase="error", message="进程存在，但面板尚未响应", pid=proc.pid, managed=True)
+                set_state(phase="error", message=i18n.t("msg_process_no_response"), pid=proc.pid, managed=True)
         update_menu()
         return
 
     discovered = discover_existing_dsh()
     if discovered:
         pid, url, _cmdline = discovered
-        set_state(phase="running", url=url, pid=pid, managed=False, message="已接管已运行的 dsh")
+        set_state(phase="running", url=url, pid=pid, managed=False, message=i18n.t("msg_taken_over"))
     elif current.get("phase") not in ("starting", "stopping"):
         clear_state()
     update_menu()
@@ -704,7 +706,7 @@ def start_impl():
     refresh_state()
     current = state_copy()
     if current["phase"] in ("starting", "running"):
-        notify(f"dsh 已在运行：{current.get('url') or '正在启动'}")
+        notify(i18n.t("notify_already_running", current.get("url") or i18n.t("notify_starting")))
         return False
     try:
         command = build_dsh_command()
@@ -718,7 +720,7 @@ def start_impl():
         url="",
         pid=None,
         managed=True,
-        message="正在启动…" + (f"（{LAUNCH_PORT_NOTE}）" if LAUNCH_PORT_NOTE else ""),
+        message=i18n.t("msg_starting_now") + (f" ({LAUNCH_PORT_NOTE})" if LAUNCH_PORT_NOTE else ""),
         last_output=[],
     )
     update_menu()
@@ -739,12 +741,12 @@ def start_impl():
             cwd=str(Path.home()),
         )
     except OSError as exc:
-        message = f"dsh 启动失败：{exc}"
+        message = i18n.t("notify_start_failed", exc)
         log(message)
         report_command_configuration_error(message, "invalid")
         return False
     except Exception as exc:
-        message = f"dsh 启动失败：{exc}"
+        message = i18n.t("notify_start_failed", exc)
         log(message)
         set_state(phase="error", message=message, pid=None, managed=False)
         notify(message)
@@ -759,7 +761,7 @@ def start_impl():
     while time.monotonic() < deadline:
         if proc.poll() is not None:
             tail = "；".join(state_copy().get("last_output", [])[-3:])
-            detail = f"退出码 {proc.returncode}"
+            detail = i18n.t("err_validate_rc", proc.returncode)
             if tail:
                 detail += f"：{tail[-240:]}"
             log(f"dsh process exited during startup: {detail}")
@@ -769,7 +771,7 @@ def start_impl():
         url = current.get("url", "")
         if url and probe_url(url):
             set_state(phase="running", message="", url=url, pid=proc.pid, managed=True)
-            notify(f"dsh 已启动：{url}")
+            notify(i18n.t("notify_started", url))
             update_menu()
             open_panel(None, None)
             return True
@@ -778,7 +780,7 @@ def start_impl():
     timeout_pids = {proc.pid}
     timeout_pids.update(listener_pids_for_port(url_port(state_copy().get("url", ""))))
     stop_process_group(timeout_pids)
-    detail = "启动超时，已清理启动进程"
+    detail = i18n.t("notify_start_timeout")
     log(f"dsh startup timeout: {detail}")
     report_runtime_start_failure(command[0], detail)
     return False
@@ -790,9 +792,9 @@ def stop_impl():
     current = state_copy()
     pid = current.get("pid")
     if not pid:
-        notify("dsh 当前未运行")
+        notify(i18n.t("notify_not_running"))
         return True
-    set_state(phase="stopping", message="正在停止…")
+    set_state(phase="stopping", message=i18n.t("notify_stopping"))
     update_menu()
     log(f"stop pid={pid} managed={current.get('managed')}")
     stop_pids = {int(pid)}
@@ -808,13 +810,13 @@ def stop_impl():
     refresh_state()
     after = state_copy()
     if after.get("phase") == "running":
-        message = "停止失败：dsh 进程仍在运行"
+        message = i18n.t("notify_stop_failed")
         set_state(phase="error", message=message)
         notify(message)
         update_menu()
         return False
     clear_state()
-    notify("dsh 已停止")
+    notify(i18n.t("notify_stopped"))
     update_menu()
     return True
 
@@ -828,7 +830,7 @@ def restart_impl():
 
 def run_action(label, func):
     if not ACTION_LOCK.acquire(blocking=False):
-        notify(f"已有操作正在执行：{label}")
+        notify(i18n.t("notify_action_busy", label))
         return
 
     def worker():
@@ -836,8 +838,8 @@ def run_action(label, func):
             func()
         except Exception as exc:
             log(f"{label} failed: {exc}")
-            set_state(phase="error", message=f"{label}失败：{exc}")
-            notify(f"{label}失败：{exc}")
+            set_state(phase="error", message=i18n.t("notify_action_failed", label, exc))
+            notify(i18n.t("notify_action_failed", label, exc))
             update_menu()
         finally:
             ACTION_LOCK.release()
@@ -847,7 +849,7 @@ def run_action(label, func):
 
 def copy_to_clipboard(text):
     if not text:
-        notify("当前没有可复制的面板地址")
+        notify(i18n.t("notify_no_url"))
         return
     try:
         root = tk.Tk()
@@ -857,10 +859,10 @@ def copy_to_clipboard(text):
         root.update()
         root.after(250, root.destroy)
         root.mainloop()
-        notify("面板地址已复制")
+        notify(i18n.t("notify_url_copied"))
     except Exception as exc:
         log(f"clipboard failed: {exc}")
-        notify(f"复制失败：{exc}")
+        notify(i18n.t("notify_copy_failed", exc))
 
 
 def notify(message):
@@ -887,21 +889,21 @@ def status_line():
     current = state_copy()
     command_status = current.get("command_status")
     if command_status == "checking":
-        return "状态：正在检测 dsh.cmd"
+        return i18n.t("status_checking_cmd")
     if command_status == "missing":
-        return "状态：未找到 dsh.cmd"
+        return i18n.t("status_cmd_missing")
     if command_status == "invalid":
-        return "状态：dsh.cmd 路径异常"
+        return i18n.t("status_cmd_invalid")
     phase = current.get("phase")
     if phase == "running":
-        return "状态：运行中"
+        return i18n.t("status_running")
     if phase == "starting":
-        return "状态：启动中"
+        return i18n.t("status_starting")
     if phase == "stopping":
-        return "状态：停止中"
+        return i18n.t("status_stopping")
     if phase == "error":
-        return "状态：异常"
-    return "状态：已停止"
+        return i18n.t("status_error")
+    return i18n.t("status_stopped")
 
 
 def display_url(url):
@@ -911,7 +913,7 @@ def display_url(url):
 
 def url_line():
     url = state_copy().get("url")
-    return f"当前面板：{display_url(url)}" if url else "当前面板：未启动"
+    return i18n.t("tray_panel", display_url(url)) if url else i18n.t("tray_panel_none")
 
 
 def has_url():
@@ -926,19 +928,19 @@ def open_panel(_icon, _item):
     refresh_state()
     url = state_copy().get("url")
     if not url:
-        notify("dsh 当前未运行")
+        notify(i18n.t("notify_not_running"))
         return
     log(f"open panel: {url}")
     try:
         opened = webbrowser.open(url)
         if not opened:
             log("open panel returned false")
-            notify("dsh 已启动，但默认浏览器没有打开面板")
+            notify(i18n.t("notify_panel_open_manual"))
     except Exception as exc:
         # The Web service is already healthy; a browser handoff failure should
         # not turn a successful dsh start into a false startup error.
         log(f"open panel failed: {exc}")
-        notify(f"dsh 已启动，但打开面板失败：{exc}")
+        notify(i18n.t("notify_panel_open_failed", exc))
 
 
 def copy_panel_url(_icon, _item):
@@ -953,7 +955,7 @@ def configured_dsh_command():
 def open_dsh_command_path(_icon, _item):
     candidate = configured_dsh_command()
     if candidate is None:
-        notify("尚未配置 dsh.cmd 路径")
+        notify(i18n.t("notify_cmd_not_set"))
         return
     try:
         candidate = candidate.resolve()
@@ -968,30 +970,30 @@ def open_dsh_command_path(_icon, _item):
             return
         except OSError as exc:
             log(f"open dsh command path failed: {exc}")
-            notify(f"打开 dsh.cmd 路径失败：{exc}")
+            notify(i18n.t("notify_open_cmd_failed", exc))
             return
     if candidate.parent.is_dir():
         os.startfile(str(candidate.parent))  # noqa: S606
-        notify("配置的 dsh.cmd 文件不存在，已打开所在目录")
+        notify(i18n.t("notify_cmd_file_missing"))
     else:
-        notify("配置的 dsh.cmd 路径不存在")
+        notify(i18n.t("notify_cmd_path_missing"))
 
 
 def start_menu(_icon, _item):
-    run_action("启动", start_impl)
+    run_action(i18n.t("action_start"), start_impl)
 
 
 def stop_menu(_icon, _item):
-    run_action("停止", stop_impl)
+    run_action(i18n.t("action_stop"), stop_impl)
 
 
 def restart_menu(_icon, _item):
-    run_action("重启", restart_impl)
+    run_action(i18n.t("action_restart"), restart_impl)
 
 
 def rescan_menu(_icon, _item):
     threading.Thread(target=refresh_state, name="dsh-rescan", daemon=True).start()
-    notify("状态检测已刷新")
+    notify(i18n.t("notify_refreshed"))
 
 
 def choose_dsh_command_menu(_icon, _item):
@@ -1016,12 +1018,12 @@ def auto_detect_dsh_command_worker():
 
 def run_auto_detect_dsh_command(startup=False):
     if not COMMAND_LOCK.acquire(blocking=False):
-        notify("dsh.cmd 正在检测中")
+        notify(i18n.t("notify_cmd_detecting"))
         return False
     try:
-        set_state(command_status="checking", message="正在检测 dsh.cmd…")
+        set_state(command_status="checking", message=i18n.t("notify_cmd_detecting_now"))
         update_menu()
-        notify("正在自动检测 dsh.cmd…")
+        notify(i18n.t("notify_cmd_autodetect_start"))
         candidates = discover_dsh_command_candidates()
         log(f"dsh command auto-detect candidates: {[str(path) for path in candidates]}")
         failures = []
@@ -1032,22 +1034,22 @@ def run_auto_detect_dsh_command(startup=False):
                 save_config()
                 set_state(command_status="ready", message="")
                 log(f"dsh command auto-detect succeeded and saved: {candidate}")
-                notify(f"自动检测成功，已找到 dsh.cmd：{candidate}")
+                notify(i18n.t("notify_cmd_autodetect_ok", candidate))
                 update_menu()
                 if startup and CFG.get("start_on_launch"):
-                    run_action("启动", start_impl)
+                    run_action(i18n.t("action_start"), start_impl)
                 return True
             failures.append(f"{candidate}: {detail}")
             log(f"dsh command auto-detect candidate failed: path={candidate} detail={detail}")
 
         status = "invalid" if failures else "missing"
-        message = "未找到可用的 dsh.cmd"
+        message = i18n.t("msg_no_cmd_found")
         set_state(command_status=status, message=message)
         if failures:
             log("dsh command auto-detect failed: " + " | ".join(failures))
         else:
             log("dsh command auto-detect failed: no candidates")
-        notify("自动检测失败：这台设备上没有找到可用的 dsh.cmd")
+        notify(i18n.t("notify_cmd_autodetect_fail"))
         update_menu()
         return False
     finally:
@@ -1066,19 +1068,19 @@ def choose_dsh_command_worker():
         current = Path(str(CFG.get("dsh_cmd", "") or ""))
         initialdir = str(current.parent) if current.parent.is_dir() else str(Path.home())
         selected = filedialog.askopenfilename(
-            title="选择 dsh.cmd",
+            title=i18n.t("dlg_choose_cmd_title"),
             initialdir=initialdir,
             initialfile="dsh.cmd",
             filetypes=[
                 ("dsh.cmd", "dsh.cmd"),
-                ("命令脚本", "*.cmd"),
-                ("所有文件", "*.*"),
+                (i18n.t("dlg_filetype_cmd"), "*.cmd"),
+                (i18n.t("dlg_filetype_all"), "*.*"),
             ],
             parent=root,
         )
     except Exception as exc:
         log(f"dsh command picker failed: {exc}")
-        notify(f"选择 dsh.cmd 失败：{exc}")
+        notify(i18n.t("notify_cmd_choose_failed", exc))
         return
     finally:
         if root is not None:
@@ -1093,50 +1095,50 @@ def choose_dsh_command_worker():
     try:
         candidate = str(Path(selected).resolve())
         log(f"dsh command validation started: {candidate}")
-        notify("正在校验 dsh.cmd…")
+        notify(i18n.t("notify_cmd_validating"))
         valid, detail = validate_dsh_command(candidate)
     except Exception as exc:
         log(f"dsh command validation crashed: path={selected} detail={exc}")
         time.sleep(VALIDATION_FAILURE_NOTIFY_DELAY_SEC)
-        notify(f"dsh.cmd 校验失败：{exc}")
+        notify(i18n.t("notify_cmd_validate_failed", exc))
         return
     if not valid:
         log(f"dsh command validation failed: path={candidate} detail={detail}")
         # 文件名校验等失败可能在“正在校验”通知刚发出后立即返回；
         # 给 Windows 通知区域留出处理上一条消息的时间，避免失败提示被吞掉。
         time.sleep(VALIDATION_FAILURE_NOTIFY_DELAY_SEC)
-        notify(f"dsh.cmd 校验失败：{detail}")
+        notify(i18n.t("notify_cmd_validate_failed", detail))
         return
 
     CFG["dsh_cmd"] = candidate
     save_config()
     set_state(command_status="ready", message="")
     log(f"dsh command validation succeeded and saved: {candidate}")
-    notify("dsh.cmd 校验成功，已保存到配置文件")
+    notify(i18n.t("notify_cmd_valid_ok"))
     update_menu()
 
 
 def build_dsh_command_menu():
     return pystray.Menu(
         pystray.MenuItem(
-            "打开路径",
+            i18n.t("menu_cmd_open_path"),
             open_dsh_command_path,
             enabled=lambda _item: configured_dsh_command() is not None,
         ),
-        pystray.MenuItem("自动检测", auto_detect_dsh_command_menu),
-        pystray.MenuItem("选择路径", choose_dsh_command_menu),
+        pystray.MenuItem(i18n.t("menu_cmd_autodetect"), auto_detect_dsh_command_menu),
+        pystray.MenuItem(i18n.t("menu_cmd_choose"), choose_dsh_command_menu),
     )
 
 
 def validate_dsh_command(path):
     candidate = Path(path)
     if candidate.name.casefold() != "dsh.cmd":
-        return False, "文件名必须是 dsh.cmd"
+        return False, i18n.t("err_validate_name")
     try:
         if not candidate.is_file():
-            return False, "文件不存在或不是文件"
+            return False, i18n.t("err_validate_not_file")
     except OSError as exc:
-        return False, f"无法读取文件：{exc}"
+        return False, i18n.t("err_validate_unreadable", exc)
 
     try:
         result = subprocess.run(
@@ -1152,17 +1154,17 @@ def validate_dsh_command(path):
             timeout=10,
         )
     except subprocess.TimeoutExpired:
-        return False, "执行 web --help 超时（10秒）"
+        return False, i18n.t("err_validate_timeout")
     except OSError as exc:
-        return False, f"无法执行：{exc}"
+        return False, i18n.t("err_validate_exec", exc)
 
     output = (result.stdout or "").strip()
     if result.returncode != 0:
         detail = "；".join(line.strip() for line in output.splitlines()[-3:] if line.strip())
-        return False, f"退出码 {result.returncode}" + (f"：{detail[-180:]}" if detail else "")
+        return False, i18n.t("err_validate_rc", result.returncode) + (f": {detail[-180:]}" if detail else "")
     if not output:
-        return False, "未返回 dsh Web 帮助信息"
-    return True, "校验成功"
+        return False, i18n.t("err_validate_no_help")
+    return True, i18n.t("msg_validate_ok")
 
 
 def set_status_refresh_interval(_icon, _item, seconds):
@@ -1170,19 +1172,19 @@ def set_status_refresh_interval(_icon, _item, seconds):
         return
     CFG["status_refresh_interval_sec"] = seconds
     save_config()
-    label = dict(STATUS_REFRESH_INTERVAL_CHOICES)[seconds]
-    notify(f"状态刷新间隔已设为 {label}")
+    label = i18n.t(dict(STATUS_REFRESH_INTERVAL_CHOICES)[seconds])
+    notify(i18n.t("notify_interval_set", label))
     update_menu()
 
 
 def build_status_refresh_interval_menu():
     return pystray.Menu(*[
         pystray.MenuItem(
-            label,
+            i18n.t(key),
             functools.partial(set_status_refresh_interval, seconds=seconds),
             checked=lambda _item, value=seconds: current_status_refresh_interval() == value,
         )
-        for seconds, label in STATUS_REFRESH_INTERVAL_CHOICES
+        for seconds, key in STATUS_REFRESH_INTERVAL_CHOICES
     ])
 
 
@@ -1204,15 +1206,33 @@ def toggle_autostart(_icon, _item):
     enabled = not autostart.is_autostart_enabled()
     autostart.set_autostart(enabled)
     ok = autostart.is_autostart_enabled() == enabled
-    notify("开机自启已开启" if enabled and ok else "开机自启已关闭" if not enabled and ok else "开机自启设置失败")
+    notify(i18n.t("notify_autostart_on") if enabled and ok
+           else i18n.t("notify_autostart_off") if not enabled and ok
+           else i18n.t("notify_autostart_failed"))
     update_menu()
 
 
 def toggle_start_on_launch(_icon, _item):
     CFG["start_on_launch"] = not bool(CFG.get("start_on_launch", False))
     save_config()
-    notify("启动时自动启动 dsh Web 已开启" if CFG["start_on_launch"] else "启动时自动启动 dsh Web 已关闭")
+    notify(i18n.t("notify_start_on_launch_on") if CFG["start_on_launch"] else i18n.t("notify_start_on_launch_off"))
     update_menu()
+
+
+def toggle_language(_icon, _item):
+    """中英切换（T1）：改语言 → 持久化 → 显式重建菜单（D14）。"""
+    new_lang = "en" if i18n.current_lang() == "zh" else "zh"
+    i18n.init(new_lang)
+    i18n.save_language_to_config(CONFIG_PATH, new_lang)
+    log(f"language switched: {new_lang}")
+    notify(i18n.t("notify_lang_switched"))
+    icon = TRAY_ICON
+    if icon is not None:
+        try:
+            icon.menu = build_menu()
+            icon.update_menu()
+        except Exception as exc:
+            log(f"menu rebuild after language switch failed: {exc}")
 
 
 def quit_menu(icon, _item):
@@ -1231,7 +1251,7 @@ def quit_menu(icon, _item):
             CFG["quit_stop_dsh"] = bool(value)
             save_config()
 
-        choice = tray_kit.confirm_quit_dialog(APP_NAME, "同时关闭当前 dsh 服务",
+        choice = tray_kit.confirm_quit_dialog(APP_NAME, i18n.t("quit_checkbox"),
                                      bool(CFG.get("quit_stop_dsh", False)),
                                      on_change=_persist_quit_stop)
     except Exception as exc:
@@ -1241,7 +1261,7 @@ def quit_menu(icon, _item):
             from tkinter import messagebox as _mb
             _root = _tk.Tk()
             _root.withdraw()
-            _go = bool(_mb.askyesno(APP_NAME, "确定退出 dsh-helper？清理选项按配置（退出后可在配置中修改）。"))
+            _go = bool(_mb.askyesno(APP_NAME, i18n.t("quit_native_text")))
             _root.destroy()
             choice = {"go": _go, "stop_service": bool(CFG.get("quit_stop_dsh", False))}
         except Exception as exc2:
@@ -1267,7 +1287,7 @@ def quit_menu(icon, _item):
     # 代价：托盘图标会多停留几秒，这是刻意的。
     STOP_EVENT.set()
     if pids:
-        set_state(phase="stopping", message="正在停止…")
+        set_state(phase="stopping", message=i18n.t("notify_stopping"))
         update_menu()
     log(f"quit requested; graceful stop pids={sorted(pids)}")
     if pids:
@@ -1275,9 +1295,9 @@ def quit_menu(icon, _item):
     icon.stop()
     if pids:
         log("quit: managed dsh stopped")
-    if update_helper.PENDING_CMD:
+    if update_helper.pending_cmd():
         # 本进程退出后由脚本接管：等待 → robocopy 铺新版 → 重启新 exe → 自删
-        os.system('start "" /min "%s"' % update_helper.PENDING_CMD)
+        os.system('start "" /min "%s"' % update_helper.pending_cmd())
 
 
 def monitor_loop():
@@ -1364,27 +1384,27 @@ def check_update_menu(_icon=None, _item=None):
     def worker():
         result = update_helper.check_update(VERSION, force=True)
         if result.get("newer"):
-            notify(f"发现新版本 {result['latest']}（当前 {VERSION}），菜单「下载并更新」可用")
+            notify(i18n.t("notify_update_available", result["latest"], VERSION))
         elif result.get("error"):
-            notify(f"检查更新失败：{result['error']}")
+            notify(i18n.t("notify_update_check_failed", result["error"]))
         else:
-            notify(f"已是最新版本 {VERSION}")
+            notify(i18n.t("notify_update_latest", VERSION))
         update_menu()
     threading.Thread(target=worker, daemon=True).start()
 
 
 def download_update_menu(_icon=None, _item=None):
-    latest = update_helper.UPDATE_READY
+    latest = update_helper.update_ready()
     if not latest or not getattr(sys, "frozen", False):
         return
 
     def worker():
         try:
             update_helper.download_and_prepare(latest, APP_DIR, UPDATE_DIR, log=log)
-            notify("更新已就绪，退出托盘后将自动完成升级并重启")
+            notify(i18n.t("notify_update_ready"))
         except Exception as exc:
             log(f"update download failed: {exc}")
-            notify(f"下载更新失败：{exc}")
+            notify(i18n.t("notify_update_download_failed", exc))
         update_menu()
     threading.Thread(target=worker, daemon=True).start()
 
@@ -1397,41 +1417,42 @@ def build_menu():
         pystray.MenuItem(lambda _item: status_line(), None, enabled=False),
         pystray.MenuItem(lambda _item: url_line(), None, enabled=False),
         # D11：复制紧贴地址行，是获取完整 URL（含 token）的唯一入口
-        pystray.MenuItem("复制面板地址", copy_panel_url, enabled=lambda _item: has_url()),
+        pystray.MenuItem(i18n.t("menu_copy_url"), copy_panel_url, enabled=lambda _item: has_url()),
         pystray.Menu.SEPARATOR,
         # ② 更新区
-        pystray.MenuItem("检查 dsh-helper 更新", check_update_menu),
-        pystray.MenuItem("下载并更新 dsh-helper", download_update_menu,
-                         enabled=lambda _item: update_helper.UPDATE_READY is not None and getattr(sys, "frozen", False)),
+        pystray.MenuItem(i18n.t("menu_check_update"), check_update_menu),
+        pystray.MenuItem(i18n.t("menu_update_now"), download_update_menu,
+                         enabled=lambda _item: update_helper.update_ready() is not None and getattr(sys, "frozen", False)),
         pystray.Menu.SEPARATOR,
         # ③ 默认入口（双击托盘）
-        pystray.MenuItem("打开 dsh 面板", open_panel, default=True, enabled=lambda _item: has_url()),
+        pystray.MenuItem(i18n.t("menu_open_panel"), open_panel, default=True, enabled=lambda _item: has_url()),
         pystray.Menu.SEPARATOR,
         # ④ 服务控制
-        pystray.MenuItem("启动 dsh Web", start_menu,
+        pystray.MenuItem(i18n.t("menu_start"), start_menu,
                          enabled=lambda _item: dsh_command_ready() and state_copy().get("phase") not in ("starting", "running", "stopping")),
-        pystray.MenuItem("停止 dsh Web", stop_menu,
+        pystray.MenuItem(i18n.t("menu_stop"), stop_menu,
                          enabled=lambda _item: bool(state_copy().get("pid")) and state_copy().get("phase") in ("running", "starting", "error")),
-        pystray.MenuItem("重启 dsh Web", restart_menu,
+        pystray.MenuItem(i18n.t("menu_restart"), restart_menu,
                          enabled=lambda _item: dsh_command_ready() and state_copy().get("phase") not in ("starting", "stopping")),
-        pystray.MenuItem("刷新状态", rescan_menu),
+        pystray.MenuItem(i18n.t("menu_refresh"), rescan_menu),
         pystray.Menu.SEPARATOR,
         # ⑤ 业务区
-        pystray.MenuItem("dsh.cmd 路径", build_dsh_command_menu()),
+        pystray.MenuItem(i18n.t("menu_dsh_cmd"), build_dsh_command_menu()),
         pystray.Menu.SEPARATOR,
         # ⑥ 打开区
-        pystray.MenuItem("打开配置文件", open_config),
-        pystray.MenuItem("打开日志目录", open_log),
+        pystray.MenuItem(i18n.t("menu_open_config"), open_config),
+        pystray.MenuItem(i18n.t("menu_open_logs"), open_log),
         pystray.Menu.SEPARATOR,
         # ⑦ 偏好区
-        pystray.MenuItem("开机自启", toggle_autostart, checked=lambda _item: autostart.is_autostart_enabled()),
-        pystray.MenuItem("启动时自动启动 dsh Web", toggle_start_on_launch,
+        pystray.MenuItem(i18n.t("menu_autostart"), toggle_autostart, checked=lambda _item: autostart.is_autostart_enabled()),
+        pystray.MenuItem(i18n.t("menu_start_on_launch"), toggle_start_on_launch,
                          checked=lambda _item: bool(CFG.get("start_on_launch", False))),
-        pystray.MenuItem("状态刷新间隔", build_status_refresh_interval_menu()),
+        pystray.MenuItem(i18n.t("menu_refresh_interval"), build_status_refresh_interval_menu()),
+        pystray.MenuItem(i18n.t("menu_language"), toggle_language),
         pystray.Menu.SEPARATOR,
         # ⑧ 退出（恒最后）。停止进行中也禁止退出：否则会再投一次 Ctrl+C，被 dsh
         # 当成「第二次信号」而跳过落盘冲刷。启动中不禁止，用户仍可随时退出托盘。
-        pystray.MenuItem("退出", quit_menu,
+        pystray.MenuItem(i18n.t("menu_quit"), quit_menu,
                          enabled=lambda _item: not STOP_EVENT.is_set() and state_copy().get("phase") != "stopping"),
     )
 
@@ -1461,6 +1482,52 @@ def smoke():
         return 1
 
 
+def lang_audit():
+    """T5/T1 自检（--lang-audit）：静态扫描本文件里未进 zh 词表的中文串。
+
+    只查字面量（docstring 除外），命中即列出行号；退出码非 0 = 有遗漏，
+    便于接进门禁。数据/标识符本就不该进词表，故只在 src/main.py 上跑。
+    """
+    import ast
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+    source_path = Path(__file__)
+    if not source_path.is_file():
+        # 冻结态没有源码可扫（--lang-audit 是 dev/CI 门禁）。这里报告已加载的词表
+        # 大小，顺带证明 locale 数据在打包态确实被解析到了。
+        print(f"lang-audit: source not available in frozen build ({source_path.name})")
+        print(f"lang-audit: loaded tables zh={len(i18n.TABLES['zh'])} en={len(i18n.TABLES['en'])}")
+        return 0
+    source = source_path.read_text(encoding="utf-8")
+    known = set(i18n.TABLES["zh"].values())
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        print(f"FAIL lang-audit: {exc}")
+        return 1
+    docstrings = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = getattr(node, "body", None)
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+                    and isinstance(body[0].value.value, str):
+                docstrings.add(id(body[0].value))
+    missing = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+            continue
+        if id(node) in docstrings:
+            continue
+        if any(0x4E00 <= ord(ch) <= 0x9FFF for ch in node.value) and node.value not in known:
+            missing.append((node.lineno, node.value))
+    for lineno, text in sorted(missing):
+        print(f"MISSING L{lineno}: {text}")
+    print(f"lang-audit: {len(missing)} untranslated Chinese literal(s); zh table={len(known)} entries")
+    return 1 if missing else 0
+
+
 # ---- 单实例：命名互斥体（T7 tray_kit；名字不含版本号，跨版本互拦） ----------
 # 旧行为是每双击一次就多一个托盘图标：多个图标各自监控同一台 dsh，状态互相矛盾，
 # 而且每个实例的「退出」都会先停 dsh。互斥体由内核管理，进程消失即自动释放。
@@ -1470,8 +1537,7 @@ def main():
     global TRAY_ICON
     if not tray_kit.acquire_single_instance("dsh-helper", log=log):
         log("another instance is already running; exiting")
-        tray_kit.warn_duplicate_instance(APP_NAME,
-                                         hint="请看任务栏右下角通知区域里的鲸鱼图标，本次启动已取消，不会多开一个托盘。")
+        tray_kit.warn_duplicate_instance(APP_NAME, hint=i18n.t("dup_hint"))
         return
     log(f"startup {APP_NAME} v{VERSION} (pid {os.getpid()})")
     # G4.1 条款 3/5：启动自愈——存量 Run 键指向的 exe 已消失（换版本目录被删）时，
@@ -1480,7 +1546,7 @@ def main():
     needs_command_detection = command_needs_startup_detection()
     set_state(
         command_status="checking" if needs_command_detection else "ready",
-        message="正在检测 dsh.cmd…" if needs_command_detection else "",
+        message=i18n.t("notify_cmd_detecting_now") if needs_command_detection else "",
     )
     save_config()
     refresh_state()
@@ -1496,7 +1562,7 @@ def main():
         time.sleep(8)
         result = update_helper.check_update(VERSION, force=False)
         if result.get("newer"):
-            notify(f"发现新版本 {result['latest']}（当前 {VERSION}），右键菜单可下载更新")
+            notify(i18n.t("notify_update_available_menu", result["latest"], VERSION))
 
     threading.Thread(target=startup_update_check, name="dsh-update-check", daemon=True).start()
 
@@ -1511,7 +1577,7 @@ def main():
                 daemon=True,
             ).start()
         elif CFG.get("start_on_launch"):
-            threading.Thread(target=lambda: run_action("启动", start_impl), daemon=True).start()
+            threading.Thread(target=lambda: run_action(i18n.t("action_start"), start_impl), daemon=True).start()
 
     TRAY_ICON.run(setup=setup_tray)
     STOP_EVENT.set()
@@ -1520,4 +1586,6 @@ def main():
 if __name__ == "__main__":
     if "--smoke" in sys.argv:
         raise SystemExit(smoke())
+    if "--lang-audit" in sys.argv:
+        raise SystemExit(lang_audit())
     main()

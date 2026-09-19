@@ -57,18 +57,55 @@ if exist "%RELEASE_DIR%" (
   exit /b 1
 )
 
-rem Running-instance check: prefix match - any version blocks a build.
-tasklist /fo csv 2>nul | findstr /i /c:"%APPNAME%" >nul
-if not errorlevel 1 (
-  echo [ERROR] %APPNAME% is running. Exit it from the tray before building.
+rem Running-instance guard (D1-02 refined 2026-09-19): refuse ONLY when the live
+rem instance runs FROM THE TARGET release dir. Building a DIFFERENT version dir is
+rem safe - files differ, and the frozen smoke pins DSH_HELPER_DATA_DIR and never
+rem takes the mutex. What IS unsafe is deleting/overwriting the dir a live instance
+rem runs from. The same guard must precede any manual rm of a release dir.
+set "RUNNING_EXE="
+for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "(Get-Process -Name %APPNAME% -ErrorAction SilentlyContinue).Path | Select-Object -First 1"`) do set "RUNNING_EXE=%%p"
+set "RUNNING_DIR="
+if defined RUNNING_EXE for %%d in ("%RUNNING_EXE%") do set "RUNNING_DIR=%%~dpd"
+if defined RUNNING_DIR if "%RUNNING_DIR:~-1%"=="\" set "RUNNING_DIR=%RUNNING_DIR:~0,-1%"
+set "TARGET_DIR="
+for %%d in ("%CD%\%RELEASE_DIR%") do set "TARGET_DIR=%%~fd"
+if defined RUNNING_DIR if /i "%RUNNING_DIR%"=="%TARGET_DIR%" (
+  echo [ERROR] A %APPNAME% instance is running FROM %RELEASE_DIR%.
+  echo [ERROR] Exit it from the tray before building that directory.
+  if not defined NOPAUSE pause
+  exit /b 1
+)
+if defined RUNNING_DIR echo [INFO] %APPNAME% running from "%RUNNING_DIR%" - not the target dir, build continues.
+
+echo [GATE] py_compile src\main.py + src\icons.py + src\modules ...
+"%PY%" -m py_compile src\main.py src\icons.py src\modules\appconfig\appconfig.py src\modules\autostart\autostart.py src\modules\i18n\i18n.py src\modules\update_helper\update_helper.py src\modules\paths\paths.py src\modules\log_kit\log_kit.py src\modules\tray_kit\tray_kit.py
+if errorlevel 1 (
+  echo [ERROR] compile gate failed.
   if not defined NOPAUSE pause
   exit /b 1
 )
 
-echo [GATE] py_compile src\main.py + src\icons.py + src\modules ...
-"%PY%" -m py_compile src\main.py src\icons.py src\modules\appconfig\appconfig.py src\modules\autostart\autostart.py src\modules\update_helper\update_helper.py src\modules\paths\paths.py src\modules\log_kit\log_kit.py src\modules\tray_kit\tray_kit.py
+rem i18n gate (T1/D1-04): the locales must answer the core keys in BOTH languages,
+rem zh is the base table and en must not silently fall back for menu/nav keys.
+echo [GATE] i18n key coverage ...
+"%PY%" -c "import json,sys; zh=json.load(open(r'locales/zh.json',encoding='utf-8')); en=json.load(open(r'locales/en.json',encoding='utf-8')); keys=['menu_quit','menu_autostart','menu_language','menu_start','menu_stop','menu_restart','menu_open_logs','notify_stopped','status_running']; miss=[k for k in keys if not zh.get(k) or not en.get(k)]; print('i18n core keys:',len(keys),'missing:',miss); sys.exit(1 if miss else 0)"
 if errorlevel 1 (
-  echo [ERROR] compile gate failed.
+  echo [ERROR] i18n gate failed: zh/en core keys missing.
+  if not defined NOPAUSE pause
+  exit /b 1
+)
+
+rem lang-audit gate (T5): no user-visible Chinese literal may bypass the zh table.
+rem Redirect the data root so the audit's module import never touches the developer's
+rem live %LOCALAPPDATA% config/log (F11/D12).
+echo [GATE] lang-audit ...
+set "DSH_HELPER_DATA_DIR=%CD%\build\lang-audit-data"
+"%PY%" src\main.py --lang-audit
+set "AUDIT_RC=%errorlevel%"
+set "DSH_HELPER_DATA_DIR="
+if exist "build\lang-audit-data" rmdir /s /q "build\lang-audit-data" >nul 2>nul
+if not "%AUDIT_RC%"=="0" (
+  echo [ERROR] lang-audit failed: Chinese literals outside the zh table - see list above.
   if not defined NOPAUSE pause
   exit /b 1
 )
@@ -108,6 +145,7 @@ echo [BUILD] PyInstaller onedir noconsole ...
   --add-data "%~dp0%APPNAME%.ico;." ^
   --add-data "%~dp0%APPNAME%-taskbar.ico;." ^
   --add-data "%~dp0resources;resources" ^
+  --add-data "%~dp0locales;locales" ^
   --collect-all psutil ^
   --collect-all tkinter ^
   --hidden-import pystray ^

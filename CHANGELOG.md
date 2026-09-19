@@ -3,10 +3,27 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
-## 1.8.2
+## Unreleased
 
-Patch release (owner ruling, D15: +0.0.1).
+Version number is intentionally NOT bumped: as of 2026-09-19 the owner ruled
+that dev work lands as local commits only and the version changes only when a
+release is cut (STANDARDS "发版节奏" clause 7). The 1.8.2 bump made earlier in
+this batch was rolled back to 1.8.1.
 
+- i18n / T1 (bilingual UI): adopted the template `modules/i18n` 2.1.1
+  (light form) - `locales/zh.json` (base) + `locales/en.json`, flat KV,
+  en falls back to zh. Every tray menu label, notification, dialog, status
+  line and validation/error message goes through `i18n.t()`; data (paths,
+  service name, `dsh.cmd`) is not translated. A "Language / 语言" item sits in
+  the preferences section; switching re-inits the language, persists it to
+  `config.json` (`language`), and **rebuilds the menu explicitly** - reading
+  the current language via `i18n.current_lang()` (not `i18n.LANG`, whose
+  package re-export was a stale-copy trap fixed in 2.1.1).
+- Build gate: `py_compile` list now includes `modules/i18n/i18n.py`; a new
+  gate asserts the zh/en tables both answer the core keys (D1-04); a new
+  `--lang-audit` gate statically scans `src/main.py` for Chinese literals
+  that are outside the zh table (AST-based, docstrings excluded) - currently
+  **0 untranslated**. PyInstaller bundles `locales` via `--add-data`.
 - Autostart (G4.1): the inline Run-key code was replaced by the family
   template module `modules/autostart` (T3, template 1.1.1, byte-identical
   copy; sync_check gates it). Packaged builds now prefer the stable install

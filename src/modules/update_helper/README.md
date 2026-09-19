@@ -15,10 +15,18 @@ exe 换不掉。
 
 | 函数/全局 | 说明 |
 |---|---|
-| `check_update(current_version, force=False)` | 返回 `dict(latest, current, newer, error)`；失败写 `error` 不抛 |
+| `check_update(current_version, force=False)` | 返回 `dict(latest, current, newer, error)`；失败写 `error` 不抛。**成功时顺带更新 `UPDATE_READY`**（1.1.0 起） |
 | `download_and_prepare(latest, target_dir, update_dir, log=…)` | 下载+校验+暂存+生成 apply.cmd；成功返回脚本路径并置 `PENDING_CMD` |
-| `UPDATE_READY` | 有新版时的版本号；控制"下载并更新"菜单可用性 |
-| `PENDING_CMD` | 已就绪的脚本路径；托盘退出后由主程序 `os.system('start "" /min …')` 拉起 |
+| **`update_ready()`** | 有新版时的版本号，否则 `None`（**推荐读法**，1.1.0）。"下载并更新"菜单可用性据此判断 |
+| **`pending_cmd()`** | 已就绪的脚本路径，否则 `None`（**推荐读法**，1.1.0）。托盘退出后由此拉起 |
+| `UPDATE_READY` / `PENDING_CMD` | 同上的**内部状态**；保留兼容，外部请改用访问器 |
+
+> **状态一律经访问器读取（1.1.0 硬性口径，同 i18n 2.1.1）**：包门面
+> （`modules/update_helper/__init__.py`）**不做 `import *`**——那会把 `UPDATE_READY` /
+> `PENDING_CMD` 拷成静态副本，函数里 `global` 重绑的是子模块那份，外部读包**永远拿到
+> 导入时的 None**：`apply.cmd` 永不拉起（更新装了等于没装），"下载并更新"永久灰着，
+> **且无任何报错**。实现为"只绑函数 + PEP 562 `__getattr__` 委派子模块"。
+> 回归：`python my-diy-tool-template/conformance_check.py --selftest`（C-21 正/反样本）。
 
 目标目录 `target_dir` 二选一：有稳定安装位的工具传 `INSTALL_DIR`（local-speak2text
 形态）；没有的传运行中 exe 所在目录（dsh/opencodex 形态）。
