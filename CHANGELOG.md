@@ -20,6 +20,23 @@ The tagging convention matches the versions in this file.
   log(*parts)`, which is the contract `update_helper`/`tray_kit` have always called it
   with) and `modules/paths/README.md` copied byte-for-byte (the `process_pending_update`
   deprecation notice).
+- **All Tk work now goes through one dedicated thread** (E1-03/I-03). The dialogs were
+  opened from `threading.Thread` workers (so the tray stays responsive while the user
+  types), which meant building and destroying a Tk interpreter **on a worker thread** -
+  that works only by accident on some `_tkinter` builds and breaks on others. `ui_post()`
+  marshals a callable onto a single long-lived Tk thread and blocks for its result, so
+  the only thing crossing a thread boundary is a plain Python object. `tk.Tk()` is now
+  reached from exactly one thread in the whole process: the dsh.cmd picker, the quit
+  confirm (both the rich dialog and the native fallback), and clipboard access.
+  The thread is **started on demand**, not from `main()` - the first version started it
+  only in `main()`, and `test_update_chain` (which calls `quit_menu()` without ever
+  running `main()`) then **hung forever** on `done.wait()`. `ui_post` also runs inline
+  when it is already on the Tk thread, so a re-entrant post cannot self-deadlock.
+- Tests: new `tests/test_ui_marshal.py` pins all of that - the result comes back, an
+  exception reaches the caller, every call lands on the **same** dedicated thread, a
+  re-entrant post resolves, and the thread exists without `main()` ever running. Each
+  case runs under a watchdog so a deadlock is reported as a red assertion instead of
+  hanging the gate.
 
 Version number is intentionally NOT bumped: as of 2026-09-19 the owner ruled
 that dev work lands as local commits only and the version changes only when a

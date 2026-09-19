@@ -11,6 +11,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import queue
 import threading
 import time
 import tkinter as tk
@@ -1002,6 +1003,58 @@ def menu_refresh_loop():
             log(f"menu refresh failed: {exc}")
 
 
+# ---- E1-03 / I-03：UI 队列封送 -------------------------------------------------
+# tkinter 不是线程安全的。此前「选择 dsh.cmd」是在 threading.Thread 里直接 tk.Tk() 的
+# （为了不阻塞托盘），等于**在工作线程里建/毁一个 Tk 解释器**——换一个 CPython/_tkinter
+# 构建就可能崩，任何跨线程共享都会踩解释器状态。
+# 改成：**所有 Tk 工作都投给同一个常驻线程**，工作线程投完等结果回来。
+# 跨线程传递的只有「队列里的一个可调用对象」，Tk 对象从不离开它自己的线程。
+ui_q = queue.Queue()
+_UI_THREAD_NAME = "dsh-ui"
+_ui_start_lock = threading.Lock()
+_ui_thread = None
+
+
+def ui_thread_loop():
+    """唯一的 Tk 线程：顺序执行投进来的 UI 工作（daemon，进程退出即结束）。"""
+    while True:
+        ui_q.get()()
+
+
+def ui_post(fn):
+    """把 UI 工作封送到唯一的 Tk 线程执行，阻塞取回结果（E1-03/I-03）。
+
+    线程**按需启动**：main() 会先起一个，但测试/诊断路径可能不经过 main()——
+    那时若只 put 不等执行，就会永久卡在 done.wait()（实测踩到：test_update_chain
+    直接调 quit_menu()，测试挂死）。所以这里补一次懒启动。
+    已在 Tk 线程上时直接跑，否则自己投的活自己等 = 自锁。
+    """
+    global _ui_thread
+    if threading.current_thread().name == _UI_THREAD_NAME:
+        return fn()
+    with _ui_start_lock:
+        if _ui_thread is None or not _ui_thread.is_alive():
+            _ui_thread = threading.Thread(target=ui_thread_loop, name=_UI_THREAD_NAME,
+                                          daemon=True)
+            _ui_thread.start()
+
+    box, done = {}, threading.Event()
+
+    def _job():
+        try:
+            box["result"] = fn()
+        except BaseException as exc:    # 异常要原样回到调用方，不能吞成静默
+            box["exc"] = exc
+        finally:
+            done.set()
+
+    ui_q.put(_job)
+    done.wait()
+    if "exc" in box:
+        raise box["exc"]
+    return box.get("result")
+
+
 def status_line():
     current = state_copy()
     command_status = current.get("command_status")
@@ -1062,7 +1115,8 @@ def open_panel(_icon, _item):
 
 def copy_panel_url(_icon, _item):
     refresh_state()
-    copy_to_clipboard(state_copy().get("url", ""))
+    # 剪贴板要临时建一个 Tk 根 → 同样封送到 Tk 线程（E1-03/I-03）。
+    ui_post(lambda: copy_to_clipboard(state_copy().get("url", "")))
 
 
 def configured_dsh_command():
@@ -1114,8 +1168,11 @@ def rescan_menu(_icon, _item):
 
 
 def choose_dsh_command_menu(_icon, _item):
+    # 对话框里有 tk.Tk()：必须走 ui_post 封送到唯一的 Tk 线程（E1-03/I-03）。
+    # 仍然另起线程，是为了不让托盘在等用户选文件的这几秒里失去响应。
     threading.Thread(
-        target=choose_dsh_command_worker,
+        target=ui_post,
+        args=(choose_dsh_command_worker,),
         name="dsh-choose-command",
         daemon=True,
     ).start()
@@ -1365,22 +1422,32 @@ def quit_menu(icon, _item):
             CFG["quit_stop_dsh"] = bool(value)
             save_config()
 
-        choice = tray_kit.confirm_quit_dialog(APP_NAME, i18n.t("quit_checkbox"),
-                                     bool(CFG.get("quit_stop_dsh", False)),
-                                     on_change=_persist_quit_stop)
+        # 确认框要建 Tk 根 → 封送到唯一的 Tk 线程（E1-03/I-03）。
+        # 降级链两级都在里面跑：富对话框失败就走原生 askyesno（同样在那一个线程上）。
+        def _confirm():
+            try:
+                return tray_kit.confirm_quit_dialog(APP_NAME, i18n.t("quit_checkbox"),
+                                                    bool(CFG.get("quit_stop_dsh", False)),
+                                                    on_change=_persist_quit_stop)
+            except Exception as exc:
+                log(f"quit dialog failed ({type(exc).__name__}: {exc}); "
+                    f"falling back to native confirm")
+            try:
+                import tkinter as _tk
+                from tkinter import messagebox as _mb
+                _root = _tk.Tk()
+                _root.withdraw()
+                _go = bool(_mb.askyesno(APP_NAME, i18n.t("quit_native_text")))
+                _root.destroy()
+                return {"go": _go, "stop_service": bool(CFG.get("quit_stop_dsh", False))}
+            except Exception as exc2:
+                log(f"native confirm failed ({type(exc2).__name__}: {exc2}); "
+                    f"proceeding without confirmation (dsh untouched by default)")
+                return None
+
+        choice = ui_post(_confirm)
     except Exception as exc:
-        log(f"quit dialog failed ({type(exc).__name__}: {exc}); falling back to native confirm")
-        try:
-            import tkinter as _tk
-            from tkinter import messagebox as _mb
-            _root = _tk.Tk()
-            _root.withdraw()
-            _go = bool(_mb.askyesno(APP_NAME, i18n.t("quit_native_text")))
-            _root.destroy()
-            choice = {"go": _go, "stop_service": bool(CFG.get("quit_stop_dsh", False))}
-        except Exception as exc2:
-            log(f"native confirm failed ({type(exc2).__name__}: {exc2}); "
-                f"proceeding without confirmation (dsh untouched by default)")
+        log(f"quit confirm could not be marshalled ({type(exc).__name__}: {exc})")
     if not choice or not choice.get("go"):
         log("quit cancelled by user")
         return
@@ -1706,6 +1773,9 @@ def main():
     threading.Thread(target=monitor_loop, name="dsh-monitor", daemon=True).start()
     # E2-09 第②拍：菜单开着时被推迟的重画在这里补上（状态刷新间隔最长 600s，不能靠它）。
     threading.Thread(target=menu_refresh_loop, name="dsh-menu-refresh", daemon=True).start()
+    # E1-03/I-03：唯一的 Tk 线程，所有对话框/剪贴板都投给它（tkinter 非线程安全）。
+    # 这里先起一个；ui_post() 也会按需懒启动，覆盖不经过 main() 的路径。
+    ui_post(lambda: None)
 
     def startup_update_check():
         global LATEST_VERSION
