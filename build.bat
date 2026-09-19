@@ -69,7 +69,14 @@ set "RUNNING_EXE="
 for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "(Get-Process -Name %APPNAME% -ErrorAction SilentlyContinue).Path | Select-Object -First 1"`) do set "RUNNING_EXE=%%p"
 set "RUNNING_DIR="
 if defined RUNNING_EXE for %%d in ("%RUNNING_EXE%") do set "RUNNING_DIR=%%~dpd"
-if defined RUNNING_DIR if "%RUNNING_DIR:~-1%"=="\" set "RUNNING_DIR=%RUNNING_DIR:~0,-1%"
+rem Normalize a trailing backslash WITHOUT the "last-char == backslash" string
+rem test: cmd parses the backslash-quote sequence specially and aborts the whole
+rem script with "The syntax of the command is incorrect." -- and it fires on the
+rem "no instance running" path (RUNNING_DIR undefined), i.e. the guard would break
+rem the very build it exists to protect. Measured with a probe that clears the
+rem variable: it aborts inside this block. The for-loop + tilde-fd form strips the
+rem trailing backslash for us (same idiom as the TARGET_DIR line below).
+if defined RUNNING_DIR for %%d in ("%RUNNING_DIR%") do set "RUNNING_DIR=%%~fd"
 set "TARGET_DIR="
 for %%d in ("%CD%\%RELEASE_DIR%") do set "TARGET_DIR=%%~fd"
 if defined RUNNING_DIR if /i "%RUNNING_DIR%"=="%TARGET_DIR%" (
