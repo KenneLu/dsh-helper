@@ -17,7 +17,8 @@
 | `APP_NAME` | str | ✅ | 展示名（托盘 title、弹窗标题），可中文 |
 | `REPO_OWNER` / `REPO_NAME` | str | 更新器需要 | GitHub `owner/repo`，T4 update_helper 消费 |
 | `EXE_NAME` | str | 更新器需要 | 打包产物 exe 名。**不带版本号**（B3：自启注册表存完整路径） |
-| `ICON_DRAW(d, size)` | callable | T6 需要 | 图标绘制函数（PIL ImageDraw），工具唯一的"个性" |
+| `ICON_DRAW(size)` | callable | T6 二选一 | 图标绘制函数：**单参** size → `PIL.Image`（T6 `icons.py` 以 `ICON_DRAW(256)` 调用），工具唯一的"个性" |
+| `ICON_ASSET` | str \| None | T6 二选一 | 手工 png 路径（相对仓库根）；非 None 时**优先于** `ICON_DRAW`。与 `ICON_DRAW` 至少给一个（G5） |
 | `VERSION` | str | 按工具 | 三段 semver（D15）。**允许不放这里**——只要全工具只有一个定义处即可（如 dsh-helper 放 main.py，CI findstr 读取） |
 
 ## 采纳步骤
