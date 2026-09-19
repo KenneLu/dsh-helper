@@ -15,8 +15,9 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from _cleanup import rmtree_cleanup, scratch_dir  # noqa: E402  （R2 位置 + 删前放句柄）
 
-_TMP = tempfile.mkdtemp(prefix="dsh-single-test-")
+_TMP = scratch_dir("dsh-single-test-")
 os.environ["DSH_HELPER_DATA_DIR"] = _TMP
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -88,6 +89,6 @@ try:
 finally:
     ctypes.WinDLL = _real_win_dll
 
-shutil.rmtree(_TMP, ignore_errors=True)
+check("temp dir cleaned up (no %TEMP% leak)", rmtree_cleanup(_TMP), str(_TMP))
 print("SINGLE INSTANCE TEST " + ("FAILED: " + ",".join(FAILS) if FAILS else "OK"), flush=True)
 sys.exit(1 if FAILS else 0)

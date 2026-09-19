@@ -20,8 +20,9 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from _cleanup import rmtree_cleanup, scratch_dir  # noqa: E402  （R2 位置 + 删前放句柄）
 
-_TMP = tempfile.mkdtemp(prefix="dsh-update-test-")
+_TMP = scratch_dir("dsh-update-test-")
 os.environ["DSH_HELPER_DATA_DIR"] = _TMP
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -35,6 +36,10 @@ def check(name, ok, detail=""):
           flush=True)
     if not ok:
         FAILS.append(name)
+
+
+# R4：被执行的脚本必须有超时；超时即 FAIL 并点名「疑似模态框」。
+_LAUNCH_TIMEOUT = 10.0
 
 
 def wait_for(pred, timeout=3.0):
@@ -141,13 +146,25 @@ check("launch flags suppress the console and detach the child",
       _ok is True and _seen.get("flags") == _want, repr(_seen))
 
 # 真的拉一次：脚本落一个标记文件，证明它脱离父进程后确实跑起来了。
+# R1（2026-09-19 lead 裁定）：替身**必须先创建且始终存在**——`start` 指向不存在的
+# 目标（.exe 或 .vbs）会弹**模态框**，无人值守下永久挂死（用户桌面上刚爆过 15 个
+# WSH「无法找到脚本文件」）。所以"有没有被启动"一律看**副作用**（marker 是否写入），
+# 绝不用"目标缺失"构造场景——那是拿模态框当断言，等于把测试变成炸弹。
 _marker = Path(_TMP) / "launched.marker"
 _script = Path(_TMP) / "probe.cmd"
 _script.write_text('@echo off\r\necho alive > "%s"\r\n' % _marker, encoding="ascii")
 _ok = _UH.launch_pending_cmd(str(_script), log=lambda *a: None)
-check("the script really runs detached", _ok is True and wait_for(_marker.is_file, 5.0),
-      "marker=%s" % _marker.is_file())
+_start = time.monotonic()
+while time.monotonic() - _start < _LAUNCH_TIMEOUT and not _marker.is_file():
+    time.sleep(0.05)
+_elapsed = time.monotonic() - _start
+check("the script really runs detached", _ok is True and _marker.is_file(),
+      "marker=%s elapsed=%.1fs" % (_marker.is_file(), _elapsed))
+# R4：把"挂死"变成"红灯"。超时的第一嫌疑是**模态框**（start 目标缺失 / 真跑单实例
+# 守卫），不是"脚本慢"——无人值守路径上一次都挂不起。
+check("launch did not hang (< %.1fs)" % _LAUNCH_TIMEOUT, _elapsed < _LAUNCH_TIMEOUT,
+      "elapsed=%.1fs —— 若超时，疑似模态框（start 目标缺失或真跑单实例守卫）" % _elapsed)
 
-shutil.rmtree(_TMP, ignore_errors=True)
+check("temp dir cleaned up (no %TEMP% leak)", rmtree_cleanup(_TMP), str(_TMP))
 print("UPDATE CHAIN TEST " + ("FAILED: " + ",".join(FAILS) if FAILS else "OK"), flush=True)
 sys.exit(1 if FAILS else 0)

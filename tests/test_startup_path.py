@@ -15,8 +15,9 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from _cleanup import rmtree_cleanup, scratch_dir  # noqa: E402  （R2 位置 + 删前放句柄）
 
-_TMP = tempfile.mkdtemp(prefix="dsh-startup-test-")
+_TMP = scratch_dir("dsh-startup-test-")
 os.environ["DSH_HELPER_DATA_DIR"] = _TMP
 os.environ["DSH_HELPER_CONFIG"] = str(Path(_TMP) / "config.json")
 
@@ -180,6 +181,6 @@ except Exception as exc:                      # noqa: BLE001
 check("second start stays silent (read-once, no repeat nag)",
       M.i18n.t("notify_update_failed_prev") not in NOTIFIES, repr(NOTIFIES))
 
-shutil.rmtree(_TMP, ignore_errors=True)
+check("temp dir cleaned up (no %TEMP% leak)", rmtree_cleanup(_TMP), str(_TMP))
 print("STARTUP PATH TEST " + ("FAILED: " + ",".join(FAILS) if FAILS else "OK"), flush=True)
 sys.exit(1 if FAILS else 0)

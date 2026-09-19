@@ -18,8 +18,9 @@ import sys
 import tempfile
 import threading
 from pathlib import Path
+from _cleanup import rmtree_cleanup, scratch_dir  # noqa: E402  （R2 位置 + 删前放句柄）
 
-_TMP = tempfile.mkdtemp(prefix="dsh-ui-test-")
+_TMP = scratch_dir("dsh-ui-test-")
 os.environ["DSH_HELPER_DATA_DIR"] = _TMP
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -87,6 +88,6 @@ check("the UI thread is started on demand (main() never ran here)",
       any(t.name == M._UI_THREAD_NAME for t in threading.enumerate()),
       repr([t.name for t in threading.enumerate()]))
 
-shutil.rmtree(_TMP, ignore_errors=True)
+check("temp dir cleaned up (no %TEMP% leak)", rmtree_cleanup(_TMP), str(_TMP))
 print("UI MARSHAL TEST " + ("FAILED: " + ",".join(FAILS) if FAILS else "OK"), flush=True)
 sys.exit(1 if FAILS else 0)

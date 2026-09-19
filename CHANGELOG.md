@@ -37,6 +37,25 @@ The tagging convention matches the versions in this file.
   re-entrant post resolves, and the thread exists without `main()` ever running. Each
   case runs under a watchdog so a deadlock is reported as a red assertion instead of
   hanging the gate.
+- **Test scratch roots moved out of `%TEMP%`; cleanup is now asserted, not assumed**
+  (lead rulings R1/R2/R4, after 15 modal Windows Script Host dialogs landed on the
+  user's desktop). Two separate things were wrong here:
+  * **R2**: all five suites used `tempfile.mkdtemp(prefix="dsh-...")`, so every gate run
+    left a directory behind - 36 had accumulated. The cause is the same one l-s2t
+    measured: `log_kit`'s `RotatingFileHandler` holds the log file open and Windows
+    will not delete a file opened without `FILE_SHARE_DELETE`, while
+    `shutil.rmtree(..., ignore_errors=True)` reports that failure as success. Suites now
+    use `tests/_cleanup.py` (ported from l-s2t): `scratch_dir()` puts the root under
+    `H:\Tools\_verify-scratch\` (env override `DSH_HELPER_SCRATCH_DIR`), and
+    `rmtree_cleanup()` drops the log handlers, retries, and **returns False unless the
+    directory is really gone** - each suite asserts it, so a future leak turns the gate
+    red instead of accumulating silently. Existing leftovers were removed.
+  * **R1+R4**: the one place a test really launches an external script now says so
+    explicitly - the stand-in `probe.cmd` is created **before** the launch and always
+    exists ("was it started" is judged by the **side effect**, a marker file, never by
+    the target being absent: `start` on a missing target pops a *modal* box), and the
+    wait is bounded with the elapsed time reported. A timeout gets its own red
+    assertion naming the first suspect - **a modal box**, not a slow script.
 
 Version number is intentionally NOT bumped: as of 2026-09-19 the owner ruled
 that dev work lands as local commits only and the version changes only when a
