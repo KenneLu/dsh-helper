@@ -130,6 +130,14 @@ if not "%AUDIT_RC%"=="0" (
 
 rem tests/ suite (D1 1.5): update-chain regression, fully stubbed. Each test pins
 rem its own <APP>_DATA_DIR before importing main, and takes no mutex / writes no registry.
+rem
+rem F11/D12 harness pin (2026-09-19): pinning inside each test file is a DISCIPLINE, and
+rem a new test file that forgets it writes the developer's live %LOCALAPPDATA% root while
+rem the build still goes green (that is how the unpinned roots were found). Pin the whole
+rem suite once here so that class of accident is not possible; the per-file pins stay,
+rem because a test run outside build.bat must still be isolated. Belt and braces - this
+rem does not replace them.
+set "DSH_HELPER_DATA_DIR=%CD%\build\test-data"
 echo [TEST] tests suite ...
 for %%t in (tests\test_*.py) do (
   "%PY%" "%%t"
@@ -139,6 +147,8 @@ for %%t in (tests\test_*.py) do (
     exit /b 1
   )
 )
+set "DSH_HELPER_DATA_DIR="
+if exist "%CD%\build\test-data" rmdir /s /q "%CD%\build\test-data"
 
 rem sync_check gate: the template repo only exists on dev machines (CI checks
 rem out a single repo) - skipped there like nosmoke, local builds keep it ON.
