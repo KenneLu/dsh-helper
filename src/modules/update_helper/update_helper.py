@@ -177,8 +177,19 @@ rem NO PIPE HERE, on purpose: this script is spawned with DETACHED_PROCESS and h
 rem no console; in that context "tasklist | find" NEVER RETURNS (find blocks on
 rem stdin forever) and the update silently never happens. tasklist writes to a file
 rem and find reads that file instead. (reme-helper: measured 0.13s vs hang.)
-tasklist /fi "imagename eq {exe}" /nh > "%POLL%" 2>nul
-find /i "{exe}" "%POLL%" >nul
+rem
+rem %SystemRoot%\System32 ON EVERY EXTERNAL COMMAND BELOW - never the bare name.
+rem PATH is not ours to assume. Measured on this machine: `where find` ->
+rem H:\Tools\Git\usr\bin\find.exe FIRST (PATH index 5) and C:\Windows\System32
+rem only at index 13. GNU find reads "/i" and the image name as PATH arguments, so
+rem it exits 1 for every input - the "if errorlevel 1 goto gone" below then fires on
+rem the FIRST tick, %tries% stays 1, :giveup is unreachable, and the wait loop never
+rem waits. The update then copies over a binary that is still running. Measured in
+rem real cmd.exe: pipe form, file-hit form and file-miss form all return 1.
+rem Same trap applies to ping (-n means "numeric" to iputils). reme-helper has
+rem carried this rule since its own update chain was written; this file was behind.
+%SystemRoot%\System32\tasklist.exe /fi "imagename eq {exe}" /nh > "%POLL%" 2>nul
+%SystemRoot%\System32\find.exe /i "{exe}" "%POLL%" >nul
 if errorlevel 1 goto gone
 set /a tries+=1
 if %tries% geq {limit} goto giveup
@@ -190,7 +201,8 @@ rem PowerShell startup (~0.3s here, measured 1.29s per 1000ms tick), which is wh
 rem the timeout line below reports a lower bound instead of a precise total.
 rem Spawned from a DETACHED_PROCESS bat, so the child has no console and no window
 rem appears (same reason `tasklist`/`find` in this file stay windowless).
-powershell -NoProfile -Command "Start-Sleep -Milliseconds {tick_ms}" >nul 2>nul
+rem Absolute path for the same reason as the two lines above: never trust PATH.
+%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -Command "Start-Sleep -Milliseconds {tick_ms}" >nul 2>nul
 goto wait
 :gone
 rem Guard the staged package BEFORE touching the install dir. An empty/exe-less STAGE can
@@ -202,10 +214,10 @@ if not exist "%STAGE%\{exe}" goto stage_invalid
 rem Snapshot the CURRENT install first. The previous BACKUP is NOT deleted here: it is the
 rem rollback source and is only rotated AFTER a copy that succeeded.
 if exist "%SNAPSHOT%" rmdir /s /q "%SNAPSHOT%"
-robocopy "%TARGET%" "%SNAPSHOT%" /e /njh /njs /nfl /ndl >nul
+%SystemRoot%\System32\Robocopy.exe "%TARGET%" "%SNAPSHOT%" /e /njh /njs /nfl /ndl >nul
 echo [{stamp}] snapshot rc=%ERRORLEVEL% >> "%LOG%"
 rem /purge removes files the previous version left behind.
-robocopy "%STAGE%" "%TARGET%" /e /purge /njh /njs /nfl /ndl >> "%LOG%" 2>&1
+%SystemRoot%\System32\Robocopy.exe "%STAGE%" "%TARGET%" /e /purge /njh /njs /nfl /ndl >> "%LOG%" 2>&1
 set "RC=%ERRORLEVEL%"
 echo [{stamp}] copied rc=%RC% >> "%LOG%"
 if %RC% geq 8 goto install_failed
@@ -230,7 +242,7 @@ rem robocopy: 0-7 = success, >=8 = failure. On failure NEVER start the new exe; 
 rem previous version from the snapshot so the tool comes back, and leave a marker for the app.
 > "%FAILED%" echo update failed {stamp}: install rc=%RC%
 echo [{stamp}] INSTALL FAILED rc=%RC% - restoring from snapshot >> "%LOG%"
-robocopy "%SNAPSHOT%" "%TARGET%" /e /purge /njh /njs /nfl /ndl >> "%LOG%" 2>&1
+%SystemRoot%\System32\Robocopy.exe "%SNAPSHOT%" "%TARGET%" /e /purge /njh /njs /nfl /ndl >> "%LOG%" 2>&1
 if errorlevel 8 goto install_dead
 rem rc<8 means "the restore did not error", NOT "the exe is now there" - the snapshot
 rem itself can be missing it. EVERY path that reaches a start must verify on its own:
