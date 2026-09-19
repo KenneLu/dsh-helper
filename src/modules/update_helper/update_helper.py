@@ -1,5 +1,13 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/update_helper/update_helper.py | TEMPLATE-VER: 1.4.4
+# TEMPLATE-FROM: my-diy-tool-template/modules/update_helper/update_helper.py | TEMPLATE-VER: 1.4.5
+# 1.4.5（任务 #32/T4）：**接口扩展，让"更新源运行时可配"能迁到模板**——
+#   `check_update(..., repo=None)` / `download_and_prepare(..., repo=None)`：
+#   缺省仍走 appconfig 的 `REPO`；l-s2t 的 `config.json:update_repo` 有三重用户可见
+#   支撑（双语 README 承诺 / `update_no_repo` 专有文案 / build.bat 出厂默认值），
+#   切模板件时**不得静默丢掉**（施工单 §3-A）。
+#   `build_apply_script(..., exe_name=None)` / `download_and_prepare(..., exe_name=None)`：
+#   **给测试用的替身口子**——l-s2t 的 4 处测试刻意渲染 `probe.exe`/`probe.vbs`，
+#   那是 R1「替身必须存在」纪律在 bat 渲染层的落实（施工单 §3-C）。
 """T4｜在线更新三段式：查（GitHub Releases）→ 下（zip + sha256）→ 换（退出后铺目录并重启）。
 
 **基准**：本件按用户仲裁规则（STANDARDS B4）以 reme-helper 的**已验证更新链**为准
@@ -348,7 +356,7 @@ def _publish(latest, current_version):
     return newer
 
 
-def check_update(current_version, force=False):
+def check_update(current_version, force=False, repo=None):
     """节流检查。返回 dict(latest/current/newer/error)；网络失败写进 error。
 
     成功路径会顺带更新 `UPDATE_READY`（新版号，或 None）——菜单可用性据此变化。
@@ -361,7 +369,10 @@ def check_update(current_version, force=False):
                 "newer": _publish(latest, current_version), "error": ""}
     try:
         req = urllib.request.Request(
-            f"https://api.github.com/repos/{REPO}/releases/latest",
+            # T4/#32：`repo=` 让**更新源可被调用方覆盖**（l-s2t 的 `config.json:update_repo`
+            # 是运行时可配的，且有三重用户可见支撑：双语 README 承诺、`update_no_repo`
+            # 专有文案、build.bat 出厂默认值）。缺省仍走 appconfig 的 `REPO`。
+            f"https://api.github.com/repos/{repo or REPO}/releases/latest",
             headers={"Accept": "application/vnd.github+json", "User-Agent": APP_ID},
         )
         with urllib.request.urlopen(req, timeout=8) as resp:
@@ -413,7 +424,8 @@ def verify_zip_sha256(zip_path, sha_text):
 
 
 def build_apply_script(target_dir, stage_dir, work_dir, backup_dir, log_path,
-                       limit=UPDATE_WAIT_LIMIT, snapshot_dir=None, failed_marker=None):
+                       limit=UPDATE_WAIT_LIMIT, snapshot_dir=None, failed_marker=None,
+                       exe_name=None):
     """生成替换脚本文本（**纯函数**，便于回归断言其语义要点）。
 
     语义要点（缺一即回归，见 README）：镜像名等待旧进程退出且**不用管道**、等待上限、
@@ -428,7 +440,11 @@ def build_apply_script(target_dir, stage_dir, work_dir, backup_dir, log_path,
     return _APPLY_BAT.format(
         target=target_dir, stage=stage_dir, work=work_dir, backup=backup_dir,
         snapshot=snapshot_dir, failed=failed_marker, log=log_path,
-        exe=EXE_NAME, newexe=os.path.join(str(target_dir), EXE_NAME),
+        # T4/#32：`exe_name=` 是**给测试用的替身口子** —— l-s2t 的 4 处测试刻意渲染
+        # `probe.exe` / `probe.vbs` 而不是真 exe，那是 R1「替身必须存在」纪律在 bat
+        # 渲染层的落实（避免渲染成真 exe 名、被误当真实更新执行）。缺省仍走 `EXE_NAME`。
+        exe=(exe_name or EXE_NAME),
+        newexe=os.path.join(str(target_dir), (exe_name or EXE_NAME)),
         limit=limit, tick_ms=UPDATE_WAIT_TICK_MS,
         # 1.4.4：budget **必须与 limit 同源**。旧写法传模块常量 `UPDATE_WAIT_BUDGET_S`
         # （按 UPDATE_WAIT_LIMIT=120 算），调用方传 `limit=2` 时会渲染出
@@ -474,7 +490,7 @@ def pop_failed_update_note(update_dir, log=lambda *a: None):
 
 
 def download_and_prepare(latest, target_dir, update_dir, log=lambda *a: None,
-                         backup_dir=None, snapshot_dir=None):
+                         backup_dir=None, snapshot_dir=None, repo=None, exe_name=None):
     """下载 zip（sha256 校验）→ 解包暂存 → 生成退出时执行的一次性替换脚本。
 
     签名与 1.0.x 一致（`backup_dir` / `snapshot_dir` 是新增可选参数，默认 `update_dir`
@@ -482,7 +498,7 @@ def download_and_prepare(latest, target_dir, update_dir, log=lambda *a: None,
     （release.yml）：压缩包里带一层 <APP_ID>-<版本>/ 目录。
     """
     update_dir = Path(update_dir)
-    base = f"https://github.com/{REPO}/releases/download/v{latest}"
+    base = f"https://github.com/{repo or REPO}/releases/download/v{latest}"
     stem = f"{APP_ID}-{latest}-windows-x64"
     zip_path = update_dir / (stem + ".zip")
     log("downloading", stem)
@@ -502,8 +518,9 @@ def download_and_prepare(latest, target_dir, update_dir, log=lambda *a: None,
         names = z.namelist()
         z.extractall(str(update_dir))
     staged = update_dir / stem
-    if not (staged / EXE_NAME).is_file():
-        if any(n == EXE_NAME or n.endswith("/" + EXE_NAME) for n in names):
+    _exe = exe_name or EXE_NAME       # T4/#32：同 build_apply_script 的替身口子
+    if not (staged / _exe).is_file():
+        if any(n == _exe or n.endswith("/" + _exe) for n in names):
             staged = update_dir  # 兜底：扁平 zip
         else:
             raise RuntimeError("staged exe missing after extract")

@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/autostart/autostart.py | TEMPLATE-VER: 1.1.2
+# TEMPLATE-FROM: my-diy-tool-template/modules/autostart/autostart.py | TEMPLATE-VER: 1.1.3
+# 1.1.3（任务 #63）：`migrate_autostart` 的不动条件从「目标存在」收紧为
+#   「**值 == 当前命令行** 且 目标存在」—— **存在性谓词不能代理"当前性"**：
+#   本家族 `release/` 保留历史版本目录（回滚路径），所以"旧版 exe 还在"恒真，
+#   旧实现对"指向废弃版本"的自启项**永不自愈**。实例：dsh 的 Run 键曾指着
+#   `release\dsh-helper-1.8.2\`（目录仍在）⇒ 登录拉起旧版、占住单实例互斥体、
+#   用户双击新版反而提示"已有实例"。同批覆盖 §4.1.22 那半（值相等但目标没了）。
 """T3｜开机自启三件套（蓝本 local-speak2text，规范 G4.1 认定的更优形态）。
 
 get_autostart_cmd 优先指向稳定安装位 INSTALL_EXE（路径永不因更新改变）；
@@ -118,10 +124,18 @@ def migrate_autostart(log=print):
         log("autostart migrate: cannot read Run entry: %s" % e)
         return
 
-    if _cmd_alive(value):
+    # T13（任务 #63）：**存在性谓词不能代理"当前性"**。
+    # 本家族 `release/` 保留历史版本目录（回滚路径），所以"旧版 exe 还在"恒真
+    # ⇒ `_cmd_alive(value)` 对**指向废弃版本**的自启项恒真 ⇒ 永不自愈。
+    # 实例：dsh 的 Run 键曾指着 `release\dsh-helper-1.8.2\`（目录仍在），
+    # 登录拉起旧版、占住单实例互斥体，用户双击新版反而提示"已有实例"。
+    # ⇒ 不动条件收紧为「**值就是当前命令行** 且 它活着」；任一不满足就重写：
+    #   · 值 != 当前 ⇒ 指向旧版本目录（本条的由来）
+    #   · 值 == 当前但目标没了 ⇒ §4.1.22 那半（旧实现的 `value == wanted` 短路）
+    wanted = get_autostart_cmd()
+    if value == wanted and _cmd_alive(value):
         return
 
-    wanted = get_autostart_cmd()
     try:
         set_autostart(True)
     except OSError as e:

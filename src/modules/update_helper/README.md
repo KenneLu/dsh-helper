@@ -18,15 +18,15 @@
 
 | 函数/全局 | 说明 |
 |---|---|
-| `check_update(current_version, force=False)` | 返回 `dict(latest, current, newer, error)`；失败写 `error` 不抛（带配额人话）。**成功时顺带更新 `UPDATE_READY`**（1.1.0 起） |
-| `download_and_prepare(latest, target_dir, update_dir, log=…, backup_dir=None, snapshot_dir=None)` | 下载+校验+暂存+生成替换脚本；成功返回脚本路径并置 `PENDING_CMD`。sha256 不匹配**或缺失**即抛 `RuntimeError` |
+| `check_update(current_version, force=False, repo=None)` | 返回 `dict(latest, current, newer, error)`；失败写 `error` 不抛（带配额人话）。**成功时顺带更新 `UPDATE_READY`**（1.1.0 起）。**`repo=`（1.4.5）**：覆盖更新源，缺省走 appconfig 的 `REPO`——给"更新源运行时可配"的工具（l-s2t 的 `config.json:update_repo`）留的接口，**不得静默丢掉** |
+| `download_and_prepare(latest, target_dir, update_dir, log=…, backup_dir=None, snapshot_dir=None, repo=None, exe_name=None)` | 下载+校验+暂存+生成替换脚本；成功返回脚本路径并置 `PENDING_CMD`。sha256 不匹配**或缺失**即抛 `RuntimeError`。**`repo=` / `exe_name=`（1.4.5）**：`repo=` 同 `check_update`；`exe_name=` 是**测试替身口子**（缺省走 `EXE_NAME`） |
 | **`update_ready()`** | 有新版时的版本号，否则 `None`（**推荐读法**，1.1.0）。"下载并更新"菜单可用性据此判断 |
 | **`pending_cmd()`** | 已就绪的脚本路径，否则 `None`（**推荐读法**，1.1.0）。托盘退出后由此拉起 |
 | **`pop_failed_update_note(update_dir, log=…)`** | 启动时读一次上次失败 marker，返回人话（无则空串）并删除（1.3.0）。读到就通知用户 |
 | **`sweep_stale_update_dirs(max_age=3600)`** | 清 %TEMP% 里被中断的更新暂存（只清一小时前的），返回个数（1.2.0） |
 | **`verify_zip_sha256(zip_path, sha_text)`** | 纯函数校验，返回 `(ok, 人话)`；**期望值为空也算失败**（1.3.0） |
 | **`launch_pending_cmd(cmd=None, log=…)`** | 退出收尾**由此拉起**替换脚本：`CREATE_NO_WINDOW \| DETACHED_PROCESS`，返回是否已拉起（1.4.0）。别自己写 `os.system('start …')` |
-| `http_error_hint(exc)` / `failed_marker_path(update_dir)` / `build_apply_script(…)` | 配额人话 / marker 路径 / 脚本生成（纯函数，供回归断言） |
+| `http_error_hint(exc)` / `failed_marker_path(update_dir)` / `build_apply_script(…, exe_name=None)` | 配额人话 / marker 路径 / 脚本生成（纯函数，供回归断言）。**`exe_name=`（1.4.5）**：渲染替身 exe 名（l-s2t 的测试用 `probe.exe`/`probe.vbs`），缺省走 `EXE_NAME` |
 | `UPDATE_READY` / `PENDING_CMD` | 兼容别名，**只读派生**（1.4.0）：模块里没有这两个全局，由 PEP 562 `__getattr__` 现算。外部请改用访问器 |
 | **`log=` 的形态（稳定承诺）** | 收进来的 `log` 必须是 **print 形态**——本模块按 `log("downloading", stem)`、`log("update staged:", staged, "->", target, "(bat %s)" % s)` 调用（全文 7 处，最多 5 个位置参数），**只收一个 message 的 log 传进来，会在"每次下载"/"每次拉起替换脚本"这类真路径上直接 TypeError**。`log_kit.make_logger` 自 1.0.3 起即为该形态（C-29 机械检查工具侧包装是否照抄签名） |
 

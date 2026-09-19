@@ -15,7 +15,7 @@
 | `get_autostart_cmd()` | 打包实例优先返回 `INSTALL_EXE`（T2 稳定位）；稳定位尚无 exe 时退回当前路径；源码态用 pythonw |
 | `is_autostart_enabled()` | Run 项存在即 True |
 | `set_autostart(enabled)` | 写/删 `Run\<APP_NAME>` |
-| `migrate_autostart(log=…)` | 启动自愈：登记的 exe 已不存在 → 重写当前命令行。判据**只看目标文件是否存在**；条目本就不存在时**不新建、只记一行日志** |
+| `migrate_autostart(log=…)` | 启动自愈：登记的 exe 已不存在 **或指向的不是当前命令行** → 重写当前命令行（1.1.3）。条目本就不存在时**不新建、只记一行日志**。⚠ **存在性谓词不能代理"当前性"**：本家族 `release/` 保留历史版本目录 ⇒ "旧版 exe 还在"恒真 ⇒ 旧实现（只看存在）对"指向废弃版本"的自启项**永不自愈**（实例：dsh 的 Run 键曾指 `release\dsh-helper-1.8.2\`） |
 
 ## 采纳步骤
 
