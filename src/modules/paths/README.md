@@ -22,7 +22,7 @@
 | `INSTALL_DIR` / `INSTALL_EXE` | 稳定安装位：自启指向这里，更新整目录替换路径不变 |
 | `is_stable_install()` | 当前 exe 是否就是稳定位实例 |
 | `ensure_user_dirs()` / `seed_config()` | 建目录 / 旧配置一次性播种 |
-| `process_pending_update()` | （可选）启动兜底：处理退出时未完成的更新镜像 |
+| ~~`process_pending_update()`~~ | **⛔ 已弃用（2026-09-19），不得用于新工具。** 它不判 `robocopy` 返回码、失败时**销毁现场**（unlink pending + 删 UPDATE_DIR），已被 `update_helper` 的**稳定安装位模式**取代。现存实现仅为兼容保留，随下一次级联移除；新代码请用 `update_helper` |
 
 ## 采纳步骤
 
@@ -32,6 +32,14 @@
    需要连配置文件位置也钉死时再设 `<APP>_CONFIG`（1.1.3+）。
 
 ## 边界与坑
+
+> **⛔ `process_pending_update()` 已弃用（2026-09-19）**：本函数用 `os.system('robocopy … /MIR …')`
+> **完全不看返回码**，随后**无条件** `UPDATE_PENDING.unlink()` + `shutil.rmtree(UPDATE_DIR)` ——
+> robocopy 失败时它把**暂存源连同失败证据一起销毁**。经审计（ALIGNMENT §7.4）：今天**零在役调用方**
+> （l-s2t 用自家加固 fork `updater.py:320`，其余三工具不调用），但它是**随四份副本发货的地雷 +
+> 本文档曾承诺的 API**。处置三步：① 本声明（先做）；② 模板落 `update_helper` 稳定安装位模式 →
+> l-s2t 改调并删 fork；③ 最后删本函数与 `UPDATE_PENDING` 并做 5 份级联。**②③ 不交叉。**
+
 
 - exe 旁的文件运行时被锁、更新要整目录替换——**除出厂模板外禁止往 APP_DIR 写状态**。
 - 大资源（模型 2GB+）放 APP_DIR 下、不入库，但配置里存相对路径时要配"向上查找回退"。

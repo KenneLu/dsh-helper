@@ -895,14 +895,111 @@ def notify(message):
             log(f"notify failed: {exc}")
 
 
-def update_menu():
+# ---- E2-09：签名重画 + 菜单占用探测 -----------------------------------------
+# 旧形态每拍无条件 icon.update_menu()，而 pystray 的重建是 DestroyMenu + CreatePopupMenu：
+# 菜单正开着时重建 = 把它从用户手底下抽走（鼠标滑着滑着突然失焦）。改成：
+#   状态提成签名 → 只有签名变了才重建 → 菜单开着时推迟，由 1.5s 补画拍补上。
+GUI_INMENUMODE = 0x00000004
+
+
+def menu_is_open():
+    """系统弹出菜单是否正开着（E2-09）。
+
+    探测：菜单模态标记 GUI_INMENUMODE 挂在**调用 TrackPopupMenu 的那个线程**上，
+    遍历本进程线程去问；再以「前台窗口是系统菜单类 #32768」兜底。探测失败当没开着
+    （宁可多重建一次，也不能因为探测失败就永远不重建）。
+    """
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class GUITHREADINFO(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.DWORD), ("flags", wintypes.DWORD),
+                        ("hwndActive", wintypes.HWND), ("hwndFocus", wintypes.HWND),
+                        ("hwndCapture", wintypes.HWND), ("hwndMenuOwner", wintypes.HWND),
+                        ("hwndMoveSize", wintypes.HWND), ("hwndCaret", wintypes.HWND),
+                        ("rcCaret", wintypes.RECT)]
+
+        user32 = ctypes.windll.user32
+        for thread in threading.enumerate():
+            tid = getattr(thread, "native_id", None)
+            if not tid:
+                continue
+            info = GUITHREADINFO()
+            info.cbSize = ctypes.sizeof(GUITHREADINFO)
+            if not user32.GetGUIThreadInfo(int(tid), ctypes.byref(info)):
+                continue
+            if info.flags & GUI_INMENUMODE:
+                return True
+        hwnd = user32.GetForegroundWindow()
+        if hwnd:
+            name = ctypes.create_unicode_buffer(32)
+            user32.GetClassNameW(hwnd, name, 32)
+            if name.value == "#32768":
+                return True
+    except Exception:
+        return False
+    return False
+
+
+def _menu_signature():
+    """菜单上会「显示出来」的全部状态：只有它变了才值得重建（E2-09/§D6）。
+
+    **漏一项 = 那一项变了菜单不刷新**。逐项对照 build_menu()：
+      · 信息行 status_line()   ← phase / command_status / managed / message / pid
+      · 地址行与「复制/打开面板」的 enabled ← url
+      · 「下载并更新」的 enabled ← LATEST_VERSION
+      · 启停重试的 enabled ← phase / pid（就绪判定用的也是 command_status）
+      · 「退出」的 enabled ← STOP_EVENT
+      · 自启 / 启动时自动启动 的 checked ← 注册表与 CFG
+      · 状态刷新间隔子菜单的 checked ← 配置
+      · 全部菜单文案 ← i18n.current_lang()
+    STOP_EVENT 与 LATEST_VERSION 不是容器，但同样驱动 enabled，一并纳入。
+    """
+    state = state_copy()
+    return (
+        i18n.current_lang(),
+        state["phase"], state["command_status"], state["managed"],
+        state["message"], state["pid"], state["url"],
+        LATEST_VERSION is not None,
+        autostart.is_autostart_enabled(),
+        bool(CFG.get("start_on_launch", False)),
+        current_status_refresh_interval(),
+        STOP_EVENT.is_set(),
+    )
+
+
+def rebuild_menu():
+    """MenuSignature 的落地动作：真正重画图标与菜单句柄（只由签名变化驱动）。"""
     icon = TRAY_ICON
-    if icon is not None:
+    if icon is None:
+        return
+    icon.icon = make_icon_image(state_copy().get("phase") == "running")
+    icon.menu = build_menu()
+    icon.update_menu()
+
+
+MENU_SIG = tray_kit.MenuSignature(rebuild_menu, menu_is_open=menu_is_open, log=log)
+
+
+def update_menu():
+    """状态变了就重画；菜单开着时自动推迟（由 menu_refresh_loop 的补画拍补上）。
+
+    调用点遍布状态变更处，保持原签名不变——只是从「每次都重建」变成「签名变了才重建」。
+    """
+    MENU_SIG.update(_menu_signature())
+
+
+def menu_refresh_loop():
+    """1.5s 补画拍（tray_kit 三循环之②）：把「菜单开着时被推迟」的那次重画补上。"""
+    while not STOP_EVENT.wait(1.5):
         try:
-            icon.icon = make_icon_image(state_copy().get("phase") == "running")
-            icon.update_menu()
-        except Exception:
-            pass
+            update_menu()
+            MENU_SIG.flush_deferred()
+        except Exception as exc:
+            log(f"menu refresh failed: {exc}")
 
 
 def status_line():
@@ -1246,13 +1343,10 @@ def toggle_language(_icon, _item):
     i18n.save_language_to_config(CONFIG_PATH, new_lang)
     log(f"language switched: {new_lang}")
     notify(i18n.t("notify_lang_switched"))
-    icon = TRAY_ICON
-    if icon is not None:
-        try:
-            icon.menu = build_menu()
-            icon.update_menu()
-        except Exception as exc:
-            log(f"menu rebuild after language switch failed: {exc}")
+    # 语言进了签名，update_menu() 就会真的重建；这里再显式补一次，保证「点了立刻变」，
+    # 而不是等下一拍（菜单若正开着，MenuSignature 会推迟到补画拍）。
+    update_menu()
+    MENU_SIG.flush_deferred()
 
 
 def quit_menu(icon, _item):
@@ -1610,6 +1704,8 @@ def main():
         menu=build_menu(),
     )
     threading.Thread(target=monitor_loop, name="dsh-monitor", daemon=True).start()
+    # E2-09 第②拍：菜单开着时被推迟的重画在这里补上（状态刷新间隔最长 600s，不能靠它）。
+    threading.Thread(target=menu_refresh_loop, name="dsh-menu-refresh", daemon=True).start()
 
     def startup_update_check():
         global LATEST_VERSION

@@ -12,7 +12,8 @@
 
 | 名称 | 说明 |
 |---|---|
-| `make_logger(log_dir)` | 返回 `(log, open_log_dir)` 两个闭包；`log(msg)` 写一行 INFO，`open_log_dir()` 起 explorer |
+| `make_logger(log_dir)` | 返回 `(log, open_log_dir)` 两个闭包；`log(*parts)` 写一行 INFO，`open_log_dir()` 起 explorer |
+| **`log` 的调用形态（1.0.3 起的稳定承诺）** | **print 形态：接受任意个位置参数，空格拼接**（`log("downloading", stem)`）。这不是口味问题——同批派发的 `update_helper` 有 7 处多参调用，`tray_kit` 按同形态接收 `log=`；**只给单参的 log 传进去，会在"每次下载"这类真路径上直接 TypeError**（C-29 机械检查） |
 | `get_logger(log_dir)` | 底层：`RotatingFileHandler(maxBytes=1MB, backupCount=3, utf-8)`，幂等 |
 | `LOG_MAX_BYTES` / `LOG_BACKUPS` | 统一参数，改这里 = 改全家族（需升 TEMPLATE-VER 并三轮复审） |
 

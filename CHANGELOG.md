@@ -4,6 +4,22 @@ All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
 ## Unreleased
+- **The tray menu is now rebuilt only when something it displays actually changed**
+  (E2-09). Every state change used to call `icon.update_menu()` unconditionally, and
+  pystray rebuilds by `DestroyMenu` + `CreatePopupMenu` - so a rebuild while the menu
+  was open yanked it out from under the cursor (the "loses focus while you slide down
+  it" symptom). The tool now feeds a tuple of everything the menu shows into
+  `tray_kit.MenuSignature`; the rebuild only happens on a signature change, and when
+  the menu is open it is **deferred** to a 1.5 s catch-up thread (`menu_refresh_loop`).
+  A `menu_is_open()` probe (the `GUI_INMENUMODE` flag scanned across this process's
+  threads, with the `#32768` system-menu window class as a fallback) answers "is it
+  open". The signature is written against `build_menu()` item by item - language,
+  status/URL text, every `enabled`/`checked` driver - because **a field missing from
+  the signature means that field changing never refreshes the menu**.
+- Template resync: `modules/log_kit` -> 1.0.3 (`log` is now print-shaped, `def
+  log(*parts)`, which is the contract `update_helper`/`tray_kit` have always called it
+  with) and `modules/paths/README.md` copied byte-for-byte (the `process_pending_update`
+  deprecation notice).
 
 Version number is intentionally NOT bumped: as of 2026-09-19 the owner ruled
 that dev work lands as local commits only and the version changes only when a
