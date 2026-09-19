@@ -143,6 +143,12 @@ from modules.paths import APP_DIR as _PATHS_APP_DIR  # noqa: E402
 check("APP_DIR has a single source (paths, not a local re-derivation)",
       M.APP_DIR == _PATHS_APP_DIR, "%s vs %s" % (M.APP_DIR, _PATHS_APP_DIR))
 check("icon asset resolves in dev mode", Path(M.ICON_ASSET).is_file(), str(M.ICON_ASSET))
+# 同名派生量只许有一个来源：运行时解析的必须是 appconfig.ICON_ASSET 那一条
+# （icons.py 构建期读的也是它），否则改了名字会 ico 变了、托盘图没变，静默分叉。
+import modules.appconfig as _AC  # noqa: E402
+check("ICON_ASSET derives from appconfig (single source of the relative path)",
+      bool(_AC.ICON_ASSET) and Path(M.ICON_ASSET).as_posix().endswith(_AC.ICON_ASSET),
+      "%s  <-  %s" % (M.ICON_ASSET, _AC.ICON_ASSET))
 
 # ---- 真 marker 端到端（上面那条用的是替身，这里把它换回真函数）--------------
 # 2026-09-19：这一跑当场抓到 `log` 契约冲突 —— 模板 update_helper 按 print 形态调用

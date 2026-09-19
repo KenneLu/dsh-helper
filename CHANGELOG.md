@@ -10,6 +10,15 @@ that dev work lands as local commits only and the version changes only when a
 release is cut (STANDARDS "发版节奏" clause 7). The 1.8.2 bump made earlier in
 this batch was rolled back to 1.8.1.
 
+- **`ICON_ASSET` had a second source here as well.** `main.py` re-typed the resource
+  literal (`resource_path("resources/img/dsh-helper-icon.png")`) while
+  `appconfig.ICON_ASSET` already declares that same relative path - and `icons.py` reads
+  the *appconfig* one at build time. Two copies of one fact means renaming the asset in
+  `appconfig.py` would move the build-time `.ico` while the runtime tray icon kept
+  looking for the old name, silently, in both dev and frozen builds. `main.py` now
+  resolves `appconfig.ICON_ASSET` instead of repeating it, and the test asserts the
+  derivation (`ICON_ASSET.endswith(appconfig.ICON_ASSET)`).
+  (Same family as the `APP_DIR` fix below: one derived quantity, one source.)
 - **The `log` contract mismatch that made the whole update path unusable.** Found by
   the real failed-marker end-to-end run below, not by reading: the template modules call
   `log` in **print form** - `update_helper` does it in six places, up to five arguments

@@ -25,7 +25,7 @@ import pystray
 from PIL import Image, ImageDraw, ImageOps
 
 from modules import autostart, i18n, log_kit, paths, tray_kit, update_helper   # noqa: E402
-from modules.appconfig import APP_ID   # noqa: E402
+from modules.appconfig import APP_ID, ICON_ASSET as ICON_ASSET_REL   # noqa: E402
 
 
 APP_NAME = "dsh-helper"
@@ -72,7 +72,11 @@ def resource_path(name):
     return APP_DIR / name
 
 
-ICON_ASSET = resource_path("resources/img/dsh-helper-icon.png")
+# 资源相对路径的**唯一来源是 appconfig.ICON_ASSET**（icons.py 构建期读的也是那一处）。
+# 这里只做"解析"，不再重抄一遍字面量：抄两份的后果是改了 appconfig 里那个名字时，
+# 构建期的 ico 跟着变、运行时的托盘图还按老名字找，两边静默分叉。
+# （同族问题见上面 APP_DIR：同名派生量只许有一个来源。）
+ICON_ASSET = resource_path(ICON_ASSET_REL) if ICON_ASSET_REL else None
 _ICON_BASE = None
 
 STATUS_REFRESH_INTERVAL_CHOICES = (
