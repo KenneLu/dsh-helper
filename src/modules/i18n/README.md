@@ -30,7 +30,7 @@
 
 1. 拷 `i18n.py`，把 `_ZH/_EN` 换成本工具词表（**从第一天建**，事后补成本翻倍）；
 2. `main()` 早期 `init(load_language_from_config(CONFIG_PATH))`；
-3. 菜单加"Language 语言"切换项，切换后**显式重建菜单**（D14）；
+3. 菜单加 `English / 中文` 切换项（**直接把两个语言名列出来**，zh/en 两表同值、**不随当前语言变**；不要写成 "Language 语言" 这类功能名），切换后**显式重建菜单**（D14）；
 4. 构建门禁加 i18n 断言（关键键 zh/en 双查，参考 local-speak2text tests.yml）。
 
 ## 边界与坑

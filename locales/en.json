@@ -16,7 +16,7 @@
   "menu_autostart": "Autostart",
   "menu_start_on_launch": "Start dsh Web on launch",
   "menu_refresh_interval": "Status refresh interval",
-  "menu_language": "Language / 语言",
+  "menu_language": "English / 中文",
   "menu_quit": "Quit",
 
   "interval_5s": "5 s",

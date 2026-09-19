@@ -16,7 +16,7 @@
   "menu_autostart": "开机自启",
   "menu_start_on_launch": "启动时自动启动 dsh Web",
   "menu_refresh_interval": "状态刷新间隔",
-  "menu_language": "语言 / Language",
+  "menu_language": "English / 中文",
   "menu_quit": "退出",
 
   "interval_5s": "5秒",
