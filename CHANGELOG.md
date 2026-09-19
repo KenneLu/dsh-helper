@@ -83,6 +83,16 @@ this batch was rolled back to 1.8.1.
   keying off return values instead makes this tool independent of that state
   (verified: `grep update_helper.(PENDING_CMD|UPDATE_READY)` is empty).
   Also resynced `modules/update_helper` to template 1.3.0.
+- **A real bug the new tests caught on their first run** (not a fix prepared in
+  advance): `check_update_menu` declared `global LATEST_VERSION`, but the
+  assignment lives in the nested `worker()` - a `global` in the enclosing
+  function does not reach into a nested one, so the write bound a local and the
+  module cache stayed `None`. The "Download and update" item would have stayed
+  grey forever even when a newer version was found. The declaration was moved
+  into `worker()`. This is the concrete payoff of the "run a real execution"
+  rule: the defect is invisible to reading, and neither the update-path review
+  nor the frozen smoke would have caught it - `test_update_chain.py` caught it
+  on its first run.
 - Tests (D1 1.4/1.5): added `tests/` with four suites, all isolated (each pins
   its own `DSH_HELPER_DATA_DIR` before importing main; no mutex, no registry,
   no network) and wired into build.bat as a gate:
