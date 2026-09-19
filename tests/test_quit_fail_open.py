@@ -209,6 +209,129 @@ check("unticked box still quits but releases the dsh service",
       % (_icon5.stopped, killed))
 
 M.log = _orig_log
+# ---------------------------------------------------------------------------
+# ⑤ 模板件契约（消费侧）：`confirm_quit_dialog` 的**取消路径必须返回 dict，不是 None**
+#
+# tray_kit 2.2.1 把契约收紧成"取消 = {'go': False}，永不 None"。而本仓
+# `_decide_quit()` 里的 `if choice is None:` 是 **fail-open 落点**：一旦有人照旧
+# docstring 把它"修好"成"取消返回 None"，用户点取消就会被读成"链路不可用" ⇒
+# 直接退出 —— 那正是 #44-A 的缺陷原形。所以从**消费侧**把契约钉死。
+#
+# 用**假 Tk** 把真函数推到取消分支：不建任何窗口、不碰桌面。真实 Tk 里
+# `wait_window()` 阻塞到窗口被销毁，而"取消"就是"销毁但不改 result"；这里在
+# wait_window 里按下取消按钮，等价于用户点「取消」/ 按 Esc。
+# **正对照**（点「确定」）必须在同一次运行里成立，否则"永远返回 go=False 的假实现"
+# 也能让取消那条腿通过。
+# ---------------------------------------------------------------------------
+_PRESS = {}
+
+
+class _FakeWidget:
+    """只实现 confirm_quit_dialog 用到的表面；窗口方法一律 no-op。"""
+
+    def __init__(self, *_a, **_k):
+        self.destroyed = False
+        self._hooks = {}
+
+    def winfo_screenwidth(self):
+        return 1920
+
+    def winfo_screenheight(self):
+        return 1080
+
+    def winfo_width(self):
+        return 380
+
+    def winfo_height(self):
+        return 160
+
+    def protocol(self, name, fn):
+        if name == "WM_DELETE_WINDOW":
+            self._hooks["close"] = fn
+
+    def bind(self, seq, fn):
+        if "Escape" in seq:
+            self._hooks["escape"] = fn
+
+    def wait_window(self):
+        # 用户按下某个按钮 —— 真实 Tk 里 cancel()/confirm() 都在按钮的 command 里
+        _PRESS[_PRESS["which"]]()
+
+    def destroy(self):
+        self.destroyed = True
+
+    def __getattr__(self, _name):
+        def _noop(*_a, **_k):
+            return None
+        return _noop
+
+
+def _install_fake_tk(which):
+    """which: 'cancel' | 'confirm'。把 tkinter 换成只够跑完这个函数的替身。"""
+    _PRESS.clear()
+    _PRESS["which"] = which
+    _PRESS["cancel"] = lambda: None
+
+    mod = types.ModuleType("tkinter")
+    mod.Tk = _FakeWidget
+    mod.Toplevel = lambda *_a, **_k: _FakeWidget()
+
+    class _BoolVar:
+        def __init__(self, master=None, value=False):
+            self._v = value
+
+        def get(self):
+            return self._v
+
+    mod.BooleanVar = _BoolVar
+    mod.Frame = _FakeWidget
+    mod.Label = _FakeWidget
+    mod.Checkbutton = _FakeWidget
+
+    def _button(_master=None, **kw):
+        # 按**文案**区分两个按钮，不依赖内部创建顺序（顺序是实现细节）
+        if kw.get("text") == "NO":
+            _PRESS["cancel"] = kw.get("command")
+        elif kw.get("text") == "YES":
+            _PRESS["confirm"] = kw.get("command")
+        return _FakeWidget()
+
+    mod.Button = _button
+    saved = sys.modules.get("tkinter")
+    sys.modules["tkinter"] = mod
+    return saved
+
+
+def _restore_tk(saved):
+    if saved is None:
+        sys.modules.pop("tkinter", None)
+    else:
+        sys.modules["tkinter"] = saved
+
+
+def _run_dialog(which):
+    saved = _install_fake_tk(which)
+    try:
+        return M.tray_kit.confirm_quit_dialog(
+            "probe-app", None, False, None, None,
+            title="t", body_text="b", confirm_text="YES", cancel_text="NO")
+    finally:
+        _restore_tk(saved)
+
+
+logs.clear()
+_r_cancel = _run_dialog("cancel")
+check("widget contract: CANCEL returns a dict, not None (fail-open arm stays reachable)",
+      _r_cancel is not None, "returned %r" % (_r_cancel,))
+check("widget contract: cancel is expressed as go=False, not as a missing return",
+      isinstance(_r_cancel, dict) and _r_cancel.get("go") is False,
+      "returned %r" % (_r_cancel,))
+_r_confirm = _run_dialog("confirm")
+check("control: CONFIRM still yields go=True (so the cancel leg is discriminating)",
+      isinstance(_r_confirm, dict) and _r_confirm.get("go") is True,
+      "returned %r" % (_r_confirm,))
+
+
 check("temp dir cleaned up (no %TEMP% leak)", rmtree_cleanup(_TMP), str(_TMP))
 print("QUIT FAIL-OPEN TEST " + ("FAILED: " + ",".join(FAILS) if FAILS else "OK"), flush=True)
 sys.exit(1 if FAILS else 0)
