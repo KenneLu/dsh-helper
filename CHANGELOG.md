@@ -4,6 +4,21 @@ All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
 ## Unreleased
+- **Registered: `modules/service_link` is an evaluated, inline-equivalent difference - a form gap, not a capability gap**
+  (lead ruling: keep the inline form now, evaluate adoption next round). The template module is a
+  single-object ownership state machine (`refresh` / `can_start` / `start` / `stop` / `state` /
+  `spectators`) over `NONE -> ADOPTED -> OWNED`. This tool's equivalent exists, but inline and spread
+  across `main.py`: `probe_url:354` (probe), `is_dsh_web_process:378` + `existing_dsh_processes:391`
+  (adoption candidates), the `managed` flag `:715`, `force_terminate_process_tree:585` and
+  `stop_process_group:612` (graceful stop, then `taskkill /F` fallback). What is missing is the
+  *shape* - one object, one state - not the behaviour; and the template README itself names this
+  tool's "adopt an already-running service" design as one of the module's blueprints, so this is
+  provenance rather than a missed copy. Adopting the module means editing the start/stop/quit paths,
+  which the user can see, so it is deliberately kept out of the current GUI-verification window.
+  **Follow-up obligation (a registration, not an exemption):** next round, either adopt `service_link`
+  (copy the file, inject the `probe` / `launch` / `terminate` / `graceful` / `adopt_pid` callbacks) or
+  record a verifiable reason why the inline form is better - per B4 principle 3 and the two
+  allowed-difference premises.
 - **The tray menu is now rebuilt only when something it displays actually changed**
   (E2-09). Every state change used to call `icon.update_menu()` unconditionally, and
   pystray rebuilds by `DestroyMenu` + `CreatePopupMenu` - so a rebuild while the menu
