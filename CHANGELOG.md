@@ -56,6 +56,17 @@ The tagging convention matches the versions in this file.
     the target being absent: `start` on a missing target pops a *modal* box), and the
     wait is bounded with the elapsed time reported. A timeout gets its own red
     assertion naming the first suspect - **a modal box**, not a slow script.
+- **The `dsh.cmd` validation timeout now has real headroom, measured rather than guessed**
+  (lead ruling: sweep the family for "run a Node CLI to probe capability" paths and adjust
+  anything with less than 3x headroom). Eight consecutive timings of `dsh.cmd web --help`
+  on this machine: **9.2 / 9.8 / 9.8 / 10.6 / 10.8 / 10.9 / 10.9 / 11.7 s** (median ~10.7 s).
+  The 10 s it used to have sat *inside* that spread, which is why the frozen smoke flickered;
+  the 30 s it was briefly raised to is only 2.6x the worst case. Now **45 s** (3.9x), which
+  also covers the cold-boot branch we cannot measure warm.
+- **The family sweep result: dsh is the only tool with that shape.** `opencodex-helper`
+  resolves `ocx.cmd` but never runs a capability probe (`run_ocx` calls `start`/`stop`/
+  `restart` with 90/60/180 s); `local-speak2text` and `reme-helper` have no Node CLI at all -
+  their timeouts are on HTTP or long-running service ops, a different class.
 
 Version number is intentionally NOT bumped: as of 2026-09-19 the owner ruled
 that dev work lands as local commits only and the version changes only when a

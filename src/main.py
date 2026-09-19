@@ -90,11 +90,14 @@ STATUS_REFRESH_INTERVAL_CHOICES = (
 STATUS_REFRESH_INTERVAL_VALUES = {seconds for seconds, _label in STATUS_REFRESH_INTERVAL_CHOICES}
 DEFAULT_STATUS_REFRESH_INTERVAL_SEC = 60
 VALIDATION_FAILURE_NOTIFY_DELAY_SEC = 2.0
-# `dsh.cmd web --help` 的超时。dsh.cmd 是 Node CLI，冷启动要加载插件：本机实测
-# 7.7–11.0s（2026-09-19 三次连测）。原先写 10s，正好卡在实测区间中段 —— 冻结冒烟
-# 于是随机红/绿，而报错只说"校验失败"，看起来像环境坏了而不是超时太紧。
+# `dsh.cmd web --help` 的超时。dsh.cmd 是 Node CLI，每次调用都要冷启动 Node + 加载插件。
+# 本机 8 次连测（2026-09-19）：9.2 / 9.8 / 9.8 / 10.6 / 10.8 / 10.9 / 10.9 / 11.7 秒
+# （中位 ~10.7s，最坏 11.7s）。原先写 10s，正好落在分布中段 —— 冻结冒烟于是随机红/绿，
+# 而报错只说"校验失败"，看起来像环境坏了，而不是超时太紧。
+# 取 45s：对最坏实测有 3.9 倍余量（家族口径 ≥3 倍），也覆盖**冷启动**（重启后首次调用
+# 没有 OS 文件缓存，会比上表慢，而这是热机状态下量不到的那条分支）。
 # 宁可多等（校验跑在后台线程 + "正在校验…"通知），也不要一个会自己抖的门禁。
-DSH_CMD_VALIDATE_TIMEOUT_SEC = 30
+DSH_CMD_VALIDATE_TIMEOUT_SEC = 45
 # 默认固定端口：与 dsh web 官方兜底端口（3080）一致；该端口被占用时本次回退为自动端口。
 DEFAULT_PORT = 3080
 
