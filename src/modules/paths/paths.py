@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/paths/paths.py | TEMPLATE-VER: 1.1.3
+# TEMPLATE-FROM: my-diy-tool-template/modules/paths/paths.py | TEMPLATE-VER: 1.1.4
 """T2｜路径与数据区（蓝本 local-speak2text/paths.py）。
 
 四个位置，职责分明：APP_DIR 程序本体；RUN_DIR 本次运行的包；USER_DATA_DIR 用户
@@ -11,6 +11,10 @@
 src/main.py + src/modules/ 布局后，本文件不再依赖自身所在深度。
 1.1.3：补 `<APP_ID 派生>_CONFIG` 环境变量（CONFIG_PATH 可被显式钉死）——兑现
 README 早已承诺的接口，消除「模板相对蓝本功能回退」（CONFORMANCE §4.1.5）。
+1.1.4：新增 **C-2** `hold_no_delete()` / `hold_exe_delete_guard()`——活实例对自己的
+exe 持一个**不含 `FILE_SHARE_DELETE`** 的句柄，把"别删正在运行的实例目录"从**纪律**
+升级成**内核强制**（删除方大声失败 winerror 32，而不是静默掏空目录）。**必须由
+`main()` 在托盘/窗口创建之前调用**（README 有 MUST-WIRE 声明，C-27 会打红没接线的工具）。
 """
 import os
 import shutil
@@ -77,6 +81,65 @@ def seed_config():
     except OSError:
         pass
     return CONFIG_PATH
+
+
+_NO_DELETE_HANDLE = None   # 活实例对自己 exe 的"拒绝删除"句柄；**故意不关**：寿命 = 进程寿命
+
+
+def hold_no_delete(path):
+    """以**不含 `FILE_SHARE_DELETE`** 的方式打开 `path`，成功返回内核句柄，失败返回 `None`。
+
+    C-2 的原语："活实例不可被删除"由**内核**保证，不由纪律保证。持有它时
+    `unlink` / `rmtree(<父目录>)` / `rename(<父目录>)` 全部失败——helpers-dev 本机实测：
+    `unlink` = winerror 32、`rmtree(release 目录)` 同、`rename(父目录)` = winerror 5；
+    无句柄的对照组 `unlink` 成功。
+
+    **为什么值得有**：删除方（构建脚本 / 手工 `rm -r` / 未来的 `--clean`）会**大声失败**，
+    而不是"静默把正在运行的实例目录掏空"——后者正是 2026-09-19 那次事故的形态
+    （实例仍在其中运行时，`release\\<工具>-<版本>\\` 被掏空）。
+    """
+    try:
+        import ctypes
+        GENERIC_READ = 0x80000000
+        FILE_SHARE_READ, FILE_SHARE_WRITE = 0x1, 0x2     # 故意**不给** FILE_SHARE_DELETE
+        OPEN_EXISTING = 3
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.CreateFileW.restype = ctypes.c_void_p
+        h = k32.CreateFileW(str(path), GENERIC_READ,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE, None, OPEN_EXISTING, 0, None)
+        if not h or h == ctypes.c_void_p(-1).value:
+            return None
+        return h
+    except Exception:
+        return None
+
+
+def hold_exe_delete_guard(log=print):
+    """启动早期调用一次：让**本实例的 exe** 在被删除/改名时由内核拒绝（C-2）。返回是否持有。
+
+    **硬要求**（lead 2026-09-19 裁定）：
+      * **进程启动早期调用，且在托盘/窗口创建之前**——晚了就等于没保护（窗口期仍可被删）；
+      * 句柄**持有到进程结束**（故意不 `close`：寿命就是进程寿命，不需要 `finally`）；
+      * **失败必须放行**（D3.2）：拿不到句柄只记一行日志，绝不拦住启动；
+      * **dev 态（未冻结）不取**：那时"本实例"是 `python.exe`，保护它没有意义，
+        反而会让开发机的 Python 升级莫名失败。
+
+    ⚠️ 与"在目录里放 in-use 标记"的分工：**标记只能当检测，不能当防护**——标记就在被盲删的
+    那个目录**内部**，盲删会连它一起删掉。防护只能来自目录**之外**的东西（本句柄，或一个
+    不看目录内容的删除守卫）。
+    """
+    global _NO_DELETE_HANDLE
+    if _NO_DELETE_HANDLE is not None:
+        return True
+    if not getattr(sys, "frozen", False):
+        log("exe delete-guard: dev mode - skipped (a handle on python.exe protects nothing)")
+        return False
+    h = hold_no_delete(sys.executable)
+    if h is None:
+        log("exe delete-guard: cannot take a handle - continuing WITHOUT it (D3.2 fail-open)")
+        return False
+    _NO_DELETE_HANDLE = h
+    return True
 
 
 def process_pending_update():

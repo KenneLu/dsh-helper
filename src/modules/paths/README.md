@@ -22,6 +22,7 @@
 | `INSTALL_DIR` / `INSTALL_EXE` | 稳定安装位：自启指向这里，更新整目录替换路径不变 |
 | `is_stable_install()` | 当前 exe 是否就是稳定位实例 |
 | `ensure_user_dirs()` / `seed_config()` | 建目录 / 旧配置一次性播种 |
+| `hold_exe_delete_guard()` / `hold_no_delete(p)` | **C-2（1.1.4）**：活实例对自己的 exe 持一个**不含 `FILE_SHARE_DELETE`** 的句柄 ⇒ 删除/改名由**内核**拒绝（本机实测：`unlink` 与 `rmtree(父目录)` = **winerror 32**、`rename(父目录)` = **winerror 5**；无句柄的对照组 `unlink` **成功**）。**`main()` 必须在托盘/窗口创建之前调用一次**并持有到进程结束（故意不 `close`）；**失败必须放行**（D3.2）；**dev 态跳过**（保护 `python.exe` 无意义）。⚠️ "在目录里放 in-use 标记"**只能当检测、不能当防护**——标记就在被盲删的那个目录**内部**，盲删会连它一起删掉 |
 | ~~`process_pending_update()`~~ | **⛔ 已弃用（2026-09-19），不得用于新工具。** 它不判 `robocopy` 返回码、失败时**销毁现场**（unlink pending + 删 UPDATE_DIR），已被 `update_helper` 的**稳定安装位模式**取代。现存实现仅为兼容保留，随下一次级联移除；新代码请用 `update_helper` |
 
 ## 采纳步骤
@@ -29,7 +30,12 @@
 1. 拷 `paths.py`，确认 `appconfig.py` 在位（唯一 import）；
 2. `main()` 最先调用 `seed_config()`，之后所有模块从这里拿路径；
 3. 测试/CI 里设 `<APP>_DATA_DIR` 指向临时目录（实例隔离，F11/D12）；
-   需要连配置文件位置也钉死时再设 `<APP>_CONFIG`（1.1.3+）。
+   需要连配置文件位置也钉死时再设 `<APP>_CONFIG`（1.1.3+）；
+4. **`main()` 在托盘/窗口创建之前调用 `hold_exe_delete_guard(log=log)`**（C-2，1.1.4+）——
+   顺序不能再往后挪，晚一步就等于那一步的窗口期没有保护。
+
+<!-- MUST-WIRE: hold_exe_delete_guard -->
+
 
 ## 边界与坑
 

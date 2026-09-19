@@ -1761,6 +1761,14 @@ def main():
         tray_kit.warn_duplicate_instance(APP_NAME, hint=i18n.t("dup_hint"))
         return
     log(f"startup {APP_NAME} v{VERSION} (pid {os.getpid()})")
+    # T2/C-2（paths 1.1.4，MUST-WIRE）：让"本实例的 exe 不可被删除/改名"由**内核**保证，
+    # 而不是由纪律保证。持有的是一个**不含 FILE_SHARE_DELETE** 的句柄 ⇒ 删除方（构建脚本 /
+    # 手工 `rm -r` / 未来的 --clean）会**大声失败**，而不是把正在运行的实例目录静默掏空
+    # （2026-09-19 事故的形态：实例仍在其中运行时 release\<工具>-<版本>\ 被掏空）。
+    # 必须在**托盘创建之前**调用——晚一步，那一步的窗口期就没有保护；句柄持有到进程结束
+    # （故意不 close，寿命就是进程寿命）；拿不到只记一行日志，绝不拦住启动（D3.2）；
+    # dev 态由模板自己跳过（保护 python.exe 无意义）。
+    paths.hold_exe_delete_guard(log=log)
     # G4.1 条款 3/5：启动自愈——存量 Run 键指向的 exe 已消失（换版本目录被删）时，
     # 静默重写到当前正确位置（优先稳定安装位 INSTALL_EXE，见 modules/autostart）。
     autostart.migrate_autostart(log=log)

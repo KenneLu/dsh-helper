@@ -81,6 +81,16 @@ check("failed marker reported once, then deleted (silent on 2nd start)",
       bool(_first) and not _marker.exists() and _second == "",
       "first=%r second=%r marker=%s" % (_first, _second, _marker.exists()))
 
+# ---- 0b) C-2（paths 1.1.4，MUST-WIRE）：真语义 —— dev 态必须**不取句柄**且**说明原因** --
+# 量的是模板件本身（跑在打桩之前，不是替身）。dev 态下"本实例"是 python.exe，给它加
+# "不可删除"既无意义、又会让开发机的 Python 升级莫名失败；而**沉默地跳过**会让下一个人
+# 以为保护生效了——所以理由必须落进日志。
+_dev_log = []
+_dev_ret = M.paths.hold_exe_delete_guard(log=_dev_log.append)
+check("C-2 guard is a no-op in dev mode and says why (never silent)",
+      _dev_ret is False and any("dev mode" in str(m) for m in _dev_log),
+      "ret=%r log=%r" % (_dev_ret, _dev_log))
+
 
 # ---- 1) 启动骨架：跑真正的 main()，重资源换替身 ------------------------------
 CALLS = {"autostart": 0, "detect": 0}
@@ -90,6 +100,7 @@ NOTIFIES = []       # notify() 实际发出的文案
 
 class _Icon:
     def __init__(self, *a, **k):
+        ORDER.append("tray")      # 托盘创建这个**时点**要可见（C-2 的顺序断言要用）
         self.visible = False
         self.menu = k.get("menu")
 
@@ -111,6 +122,10 @@ class _Icon:
 M.tray_kit.acquire_single_instance = lambda *_a, **_k: True
 M.tray_kit.warn_duplicate_instance = lambda *_a, **_k: None
 M.pystray.Icon = _Icon
+# C-2（paths 1.1.4 MUST-WIRE）：守卫必须在**托盘创建之前**被调用——顺序就是那条契约
+# 本身（README：晚一步，那一步的窗口期就没有保护）。替身签名**照抄生产**
+# （`hold_exe_delete_guard(log=print)`）；写成 `lambda *a, **k` 会连"传错参数"也收下。
+M.paths.hold_exe_delete_guard = lambda log=print: ORDER.append("guard") or True
 M.refresh_state = lambda: None
 M.autostart.migrate_autostart = lambda **k: CALLS.__setitem__("autostart", CALLS["autostart"] + 1)
 M.run_auto_detect_dsh_command = lambda startup=False: CALLS.__setitem__("detect", CALLS["detect"] + 1)
@@ -135,8 +150,8 @@ check("startup sequence reached (log has startup)",
 check("migrate_autostart called on startup", CALLS["autostart"] == 1, repr(CALLS))
 check("command detection reached (dsh.cmd not configured)",
       CALLS["detect"] == 1, repr(CALLS))
-check("update housekeeping ran at startup: sweep, then failed-note",
-      ORDER == ["sweep", "note"], repr(ORDER))
+check("startup wiring order: delete-guard, sweep, failed-note, then tray",
+      ORDER == ["guard", "sweep", "note", "tray"], repr(ORDER))
 check("failed-update note is surfaced through the i18n table",
       NOTIFIES == [M.i18n.t("notify_update_failed_prev")], repr(NOTIFIES))
 check("log written inside the isolated data dir", str(LOG_PATH).startswith(_TMP),
