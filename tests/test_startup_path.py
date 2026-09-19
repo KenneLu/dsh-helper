@@ -116,6 +116,7 @@ M.run_auto_detect_dsh_command = lambda startup=False: CALLS.__setitem__("detect"
 M.update_helper.check_update = lambda version, force=False: {"newer": False, "latest": "", "current": version}
 # T4 接线：清 TEMP 残包 + 取上次失败 marker。返回中文串（模板件），工具只用它的真值。
 M.update_helper.sweep_stale_update_dirs = lambda *a, **k: ORDER.append("sweep") or 3
+_REAL_POP = M.update_helper.pop_failed_update_note     # 留给下面的真 marker 端到端用例
 M.update_helper.pop_failed_update_note = lambda *a, **k: ORDER.append("note") or "上次自动更新失败"
 M.notify = lambda msg: NOTIFIES.append(msg)
 
@@ -142,6 +143,36 @@ from modules.paths import APP_DIR as _PATHS_APP_DIR  # noqa: E402
 check("APP_DIR has a single source (paths, not a local re-derivation)",
       M.APP_DIR == _PATHS_APP_DIR, "%s vs %s" % (M.APP_DIR, _PATHS_APP_DIR))
 check("icon asset resolves in dev mode", Path(M.ICON_ASSET).is_file(), str(M.ICON_ASSET))
+
+# ---- 真 marker 端到端（上面那条用的是替身，这里把它换回真函数）--------------
+# 2026-09-19：这一跑当场抓到 `log` 契约冲突 —— 模板 update_helper 按 print 形态调用
+# `log("previous update failed:", detail)`，而工具的 log 只收一个参数 ⇒ 只要失败 marker
+# 存在，启动就 TypeError。替身永远测不出来，必须真跑一次。
+from modules.update_helper.update_helper import failed_marker_path  # noqa: E402
+from modules.paths import UPDATE_DIR as _UPDATE_DIR  # noqa: E402
+
+_marker = failed_marker_path(_UPDATE_DIR)
+_marker.parent.mkdir(parents=True, exist_ok=True)
+_marker.write_text("rc=16 robocopy failed", encoding="utf-8")
+M.update_helper.pop_failed_update_note = _REAL_POP
+NOTIFIES.clear()
+try:
+    M.main()
+except Exception as exc:                      # noqa: BLE001 - 失败要变成一条红断言
+    check("real failed-marker start does not raise", False, "%s: %s" % (type(exc).__name__, exc))
+_notified = [m for m in NOTIFIES if m == M.i18n.t("notify_update_failed_prev")]
+check("real update.failed marker is surfaced on the next start",
+      bool(_notified), repr(NOTIFIES))
+check("real update.failed marker is consumed (read once, then deleted)",
+      not _marker.is_file(), str(_marker))
+
+NOTIFIES.clear()
+try:
+    M.main()
+except Exception as exc:                      # noqa: BLE001
+    check("second start with no marker does not raise", False, "%s: %s" % (type(exc).__name__, exc))
+check("second start stays silent (read-once, no repeat nag)",
+      M.i18n.t("notify_update_failed_prev") not in NOTIFIES, repr(NOTIFIES))
 
 shutil.rmtree(_TMP, ignore_errors=True)
 print("STARTUP PATH TEST " + ("FAILED: " + ",".join(FAILS) if FAILS else "OK"), flush=True)

@@ -10,6 +10,26 @@ that dev work lands as local commits only and the version changes only when a
 release is cut (STANDARDS "发版节奏" clause 7). The 1.8.2 bump made earlier in
 this batch was rolled back to 1.8.1.
 
+- **The `log` contract mismatch that made the whole update path unusable.** Found by
+  the real failed-marker end-to-end run below, not by reading: the template modules call
+  `log` in **print form** - `update_helper` does it in six places, up to five arguments
+  (`log("update staged:", staged, "->", target, ...)`) - while this tool's `log()` took
+  exactly one. Passing it in as `log=log` therefore raised `TypeError` on the first log
+  line of every real path: "downloading" (every download), "pending update launched"
+  (every successful stage-and-quit), and "previous update failed" (whenever a failure
+  marker exists). Stubs hid it completely - `test_update_chain.py` stubs
+  `download_and_prepare`, and the one place that called `launch_pending_cmd` for real
+  passed its own `lambda *a: None`. `log()` now takes `*parts` and joins them, matching
+  the contract the modules are written against.
+  The same mismatch exists in the template's own `log_kit.make_logger` (it returns
+  `log(message)`), which is why l-s2t/reme have the same latent shape - reported for
+  the template to settle, since that file is not ours.
+- Tests: `test_update_chain.py` pins the arity contract directly
+  (`log("contract", "check", "with", "five", "args")` must not raise), and
+  `test_startup_path.py` now finishes with a **real** `update.failed` marker and the
+  **real** `pop_failed_update_note`: it asserts the user is notified, the marker is
+  consumed, and a second start stays silent. That run is what caught the defect.
+
 - **Quitting with an update staged no longer flashes a console window.** The exit path
   used `os.system('start "" /min "<script>"')`, which goes through `cmd` and creates a
   console for a GUI process that has none - a black box blinks on the desktop as the

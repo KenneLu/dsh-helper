@@ -61,6 +61,16 @@ class _Icon:
         self.stopped = True
 
 
+# ⓪ 日志契约：模板件按 print 形态调用 log（最多 5 参，update_helper L442）。
+# 工具的 log 若只收 1 个参数，模块里那 6 处多参调用会在**真路径**上 TypeError——
+# 「每次下载」「每次拉起替换脚本」「存在失败 marker 时」全中（2026-09-19 实测踩中）。
+try:
+    M.log("contract", "check", "with", "five", "args")
+    _arity_ok, _arity_detail = True, ""
+except TypeError as _exc:
+    _arity_ok, _arity_detail = False, str(_exc)
+check("tool log() accepts the template's multi-arg (print) form", _arity_ok, _arity_detail)
+
 # ① 发现新版 → 缓存 LATEST_VERSION
 M.TRAY_ICON = _Icon()
 M.LATEST_VERSION = None

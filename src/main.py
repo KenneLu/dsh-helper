@@ -109,8 +109,15 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 _logger = log_kit.get_logger(LOG_DIR)   # T12：滚动 1MB×3（house 标准 D13）
 
 
-def log(message):
-    _logger.info(message)
+def log(*parts):
+    """模板件的日志契约是 **print 形态**（`log("下载中", name)`），与 log_kit 的单参闭包不同。
+
+    `modules/update_helper` 里有 6 处多参调用；传单参的 log 进去，它们会在**真路径**上
+    TypeError —— 而命中的正是"每次下载"(L407)、"每次成功拉起替换脚本"(L257)、
+    "存在失败 marker 时"(L390) 这类必然会走到的行。dsh 的更新链因此从来没跑通过。
+    这里按契约收任意个参数再拼接（模板 log_kit 待 tpl-keeper 统一为同一形态）。
+    """
+    _logger.info(" ".join(str(part) for part in parts))
 
 
 def load_config():
