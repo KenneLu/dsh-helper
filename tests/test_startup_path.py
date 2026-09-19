@@ -13,6 +13,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 _TMP = tempfile.mkdtemp(prefix="dsh-startup-test-")
@@ -23,6 +24,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import pystray  # noqa: E402
 import main as M  # noqa: E402
 from modules.paths import LOG_PATH  # noqa: E402
+from modules.update_helper.update_helper import (  # noqa: E402
+    TEMP_PREFIX,
+    failed_marker_path,
+    pop_failed_update_note as real_pop,
+    sweep_stale_update_dirs as real_sweep,
+)
 
 FAILS = []
 
@@ -34,7 +41,50 @@ def check(name, ok, detail=""):
         FAILS.append(name)
 
 
-CALLS = {"pending": 0, "autostart": 0, "detect": 0}
+# ---- 0) T4 两条自证：先验模板件的真实语义（此时还没打桩） --------------------
+# sweep 只清一小时前的：伪造一个 TEMP 根，老目录该没、新目录和无关目录该留。
+_fake_temp = Path(_TMP) / "fake-temp"
+_fake_temp.mkdir()
+_old = _fake_temp / (TEMP_PREFIX + "old")
+_fresh = _fake_temp / (TEMP_PREFIX + "fresh")
+_unrelated = _fake_temp / "unrelated-dir"
+for _d in (_old, _fresh, _unrelated):
+    _d.mkdir()
+_now = time.time()
+os.utime(_fresh, (_now, _now))
+os.utime(_unrelated, (_now, _now))
+os.utime(_old, (_now - 7200, _now - 7200))
+
+_saved_tempdir = tempfile.tempdir
+tempfile.tempdir = str(_fake_temp)   # 只改扫到哪个 TEMP 根，逻辑本身不动
+try:
+    _removed = real_sweep(max_age=3600.0)
+finally:
+    tempfile.tempdir = _saved_tempdir
+
+check("sweep removes only stale update dirs (older than 1h)",
+      _removed == 1 and not _old.exists() and _fresh.exists() and _unrelated.exists(),
+      "removed=%s old=%s fresh=%s other=%s" % (_removed, _old.exists(),
+                                               _fresh.exists(), _unrelated.exists()))
+
+# 失败 marker 读一次即删：第二次启动不该再提示。
+_home = Path(_TMP) / "marker-home"
+_home.mkdir()
+_upd = _home / "update-stage"
+_upd.mkdir()
+_marker = failed_marker_path(_upd)
+_marker.write_text("rc=1 sha256 mismatch", encoding="utf-8")
+_first = real_pop(_upd)
+_second = real_pop(_upd)
+check("failed marker reported once, then deleted (silent on 2nd start)",
+      bool(_first) and not _marker.exists() and _second == "",
+      "first=%r second=%r marker=%s" % (_first, _second, _marker.exists()))
+
+
+# ---- 1) 启动骨架：跑真正的 main()，重资源换替身 ------------------------------
+CALLS = {"autostart": 0, "detect": 0}
+ORDER = []          # T4 两条接线的调用顺序
+NOTIFIES = []       # notify() 实际发出的文案
 
 
 class _Icon:
@@ -64,6 +114,10 @@ M.refresh_state = lambda: None
 M.autostart.migrate_autostart = lambda **k: CALLS.__setitem__("autostart", CALLS["autostart"] + 1)
 M.run_auto_detect_dsh_command = lambda startup=False: CALLS.__setitem__("detect", CALLS["detect"] + 1)
 M.update_helper.check_update = lambda version, force=False: {"newer": False, "latest": "", "current": version}
+# T4 接线：清 TEMP 残包 + 取上次失败 marker。返回中文串（模板件），工具只用它的真值。
+M.update_helper.sweep_stale_update_dirs = lambda *a, **k: ORDER.append("sweep") or 3
+M.update_helper.pop_failed_update_note = lambda *a, **k: ORDER.append("note") or "上次自动更新失败"
+M.notify = lambda msg: NOTIFIES.append(msg)
 
 rc = M.main()
 
@@ -74,6 +128,10 @@ check("startup sequence reached (log has startup)",
 check("migrate_autostart called on startup", CALLS["autostart"] == 1, repr(CALLS))
 check("command detection reached (dsh.cmd not configured)",
       CALLS["detect"] == 1, repr(CALLS))
+check("update housekeeping ran at startup: sweep, then failed-note",
+      ORDER == ["sweep", "note"], repr(ORDER))
+check("failed-update note is surfaced through the i18n table",
+      NOTIFIES == [M.i18n.t("notify_update_failed_prev")], repr(NOTIFIES))
 check("log written inside the isolated data dir", str(LOG_PATH).startswith(_TMP),
       str(LOG_PATH))
 

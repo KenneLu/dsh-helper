@@ -10,6 +10,27 @@ that dev work lands as local commits only and the version changes only when a
 release is cut (STANDARDS "发版节奏" clause 7). The 1.8.2 bump made earlier in
 this batch was rolled back to 1.8.1.
 
+- Update housekeeping is now actually wired in (T4 收尾): `sweep_stale_update_dirs()`
+  runs at startup and removes `<APP_ID>-update-*` staging dirs that an interrupted
+  updater left in %TEMP% (only those older than 1 h, so an in-flight update is never
+  touched - ~50 MB per run otherwise accumulates forever); `pop_failed_update_note(
+  UPDATE_DIR)` then consumes the failed-update marker **once** and, when it was set,
+  the tray raises `notify_update_failed_prev` the moment it becomes visible. Both were
+  dead template code before (0 call sites in `src/*.py`). The string the module returns
+  is Chinese, so only its truthiness is used and the user-visible sentence comes from
+  the locale table (T1); the detail is already in `update.log`. `--smoke` returns before
+  `main()`, so the probe stays read-only (D3-03).
+- Tests: `test_startup_path.py` now covers all three acceptance points - the **real**
+  sweep deletes an aged dir while keeping a fresh one and an unrelated one (with
+  `tempfile.tempdir` redirected to a throwaway root), the **real** marker is reported
+  once and is silently gone on a second start, and `main()` calls sweep-then-note and
+  surfaces the i18n message.
+- Template resync: `modules/tray_kit` -> 2.2.0 - `mutex_name_ok()` is now the single
+  shape predicate shared by the guard, the probe and `single_instance_free()`; the
+  guard passes an illegal name **through** with a log line instead of failing closed
+  (D3.2), leaving the "go red" job to the build-time probe (D3.3). Call sites unchanged;
+  the module `README.md` was resynced byte-for-byte as well.
+
 - Updates (T4): the update path no longer reads `update_helper`'s mutable
   globals. The discovered version is cached in `LATEST_VERSION` (taken from
   `check_update()`'s return value), `download_and_prepare()`'s returned script

@@ -1562,6 +1562,17 @@ def main():
     # G4.1 条款 3/5：启动自愈——存量 Run 键指向的 exe 已消失（换版本目录被删）时，
     # 静默重写到当前正确位置（优先稳定安装位 INSTALL_EXE，见 modules/autostart）。
     autostart.migrate_autostart(log=log)
+    # T4 收尾：更新脚本在托盘退出后才跑，要是被打断（重启/被杀/半路消失），那份解压好的
+    # 整包（实测 ~50MB/次）就烂在 %TEMP% 里没人知道——启动扫一次。只清一小时前的：
+    # 正在进行的更新，其暂存目录是刚建的。清扫失败不抛，拦不住启动。
+    swept = update_helper.sweep_stale_update_dirs()
+    if swept:
+        log(f"update housekeeping: swept {swept} stale update dir(s) from TEMP")
+    # T4 收尾：上次更新失败的通知也只能等下次启动说（更新脚本自删了）。marker 读一次即删，
+    # 所以先取出来；托盘还没建、通知发不出去，先留在闭包里，到 setup_tray 再发。
+    # 模板返回的是中文人话串（详情它已自己写进 update.log），这里只取"失败过"这个事实，
+    # 文案走 i18n，否则英文界面会弹出一句中文（T1 回归）。
+    failed_note = update_helper.pop_failed_update_note(UPDATE_DIR, log=log)
     needs_command_detection = command_needs_startup_detection()
     set_state(
         command_status="checking" if needs_command_detection else "ready",
@@ -1591,6 +1602,9 @@ def main():
         # 传入自定义 setup 后，pystray 不会再自动设置 visible=True。
         # 必须显式显示图标，否则进程会常驻但托盘中看不到入口。
         _icon.visible = True
+        # 上次更新失败的通知：早退、无托盘时不提示，只有真起来了才说（见 main() 里的注释）。
+        if failed_note:
+            notify(i18n.t("notify_update_failed_prev"))
         if needs_command_detection:
             threading.Thread(
                 target=lambda: run_auto_detect_dsh_command(startup=True),

@@ -86,6 +86,7 @@
   "notify_update_latest": "Already on the latest version %s",
   "notify_update_ready": "Update is ready; it will be applied and restarted after you quit the tray",
   "notify_update_download_failed": "Update download failed: %s",
+  "notify_update_failed_prev": "The previous automatic update failed; it was rolled back and the scene preserved. See update.log for details.",
 
   "msg_validate_ok": "validation succeeded",
   "err_cmd_not_set": "dsh.cmd path is not configured",
