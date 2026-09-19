@@ -23,6 +23,7 @@
 | `quit_watch_loop(stop_event, path, on_quit, beat=1.0)` | 1s 拍监视请求文件，发现即删并回调 `on_quit`（走与托盘退出同一条清理路径） |
 | `mask_token(url, keep="••••••")` | D11：展示面 token 全掩码；完整地址唯一入口 = 复制项 |
 | `MenuSignature(rebuild, menu_is_open, log=…)` | 签名重画：`.update(sig)` 签名变了才重建菜单、菜单开着推迟；`.flush_deferred()` 给 1.5s 补画拍调用 |
+| **`log=` 的形态（稳定承诺）** | 本模块只按**单参**形态调用（`log(f"...")`），但**收 `log=` 的三个模板件（tray_kit / update_helper / log_kit）对外统一为 print 形态**——接受任意个位置参数。理由：调用形态必须**家族一致**，否则"哪个模块要哪种 log"变成口口相传的暗规则（C-29） |
 
 ## 三循环骨架（reme-helper 蓝本，组装规范）
 

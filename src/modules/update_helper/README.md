@@ -28,6 +28,7 @@
 | **`launch_pending_cmd(cmd=None, log=…)`** | 退出收尾**由此拉起**替换脚本：`CREATE_NO_WINDOW \| DETACHED_PROCESS`，返回是否已拉起（1.4.0）。别自己写 `os.system('start …')` |
 | `http_error_hint(exc)` / `failed_marker_path(update_dir)` / `build_apply_script(…)` | 配额人话 / marker 路径 / 脚本生成（纯函数，供回归断言） |
 | `UPDATE_READY` / `PENDING_CMD` | 兼容别名，**只读派生**（1.4.0）：模块里没有这两个全局，由 PEP 562 `__getattr__` 现算。外部请改用访问器 |
+| **`log=` 的形态（稳定承诺）** | 收进来的 `log` 必须是 **print 形态**——本模块按 `log("downloading", stem)`、`log("update staged:", staged, "->", target, "(bat %s)" % s)` 调用（全文 7 处，最多 5 个位置参数），**只收一个 message 的 log 传进来，会在"每次下载"/"每次拉起替换脚本"这类真路径上直接 TypeError**。`log_kit.make_logger` 自 1.0.3 起即为该形态（C-29 机械检查工具侧包装是否照抄签名） |
 
 > **状态一律经访问器读取（1.1.0 硬性口径；1.4.0 起结构上是唯一可能）**：状态住在
 > `_PUBLISHED` **dict 里就地改**，唯一写入点；`UPDATE_READY` / `PENDING_CMD` 是
