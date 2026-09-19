@@ -52,7 +52,14 @@
 1. **等待旧进程退出用镜像名，且不用管道**：脚本以 DETACHED_PROCESS 起，无 console；
    那种上下文里 `tasklist | find` **永不返回**（`find` 永远阻塞在 stdin），更新会静默不发生。
    故 `tasklist` **写文件**、`find` 读该文件。
-2. **等待有上限**（`UPDATE_WAIT_LIMIT=120`，约 1 秒/次），超时走 `:giveup` 记日志。
+2. **等待有上限**：`UPDATE_WAIT_LIMIT`（**轮询次数**）× `UPDATE_WAIT_TICK_MS`（每拍毫秒）
+   = `UPDATE_WAIT_BUDGET_S`（名义预算，**下界**），超时走 `:giveup` 记日志，日志报的是
+   `%tries% polls x {tick_ms}ms` 而**不是一个没人量过的"秒"**。
+   ⚠️ 节拍**不许用 `ping`**（1.4.3 前的形态）：`ping -n 2 127.0.0.1` 看着像"睡 1 秒"，在
+   丢弃 loopback ICMP 的机器上实测 **9.0s/拍** —— 名义 120s 变成约 18 分钟，而超时日志
+   仍写 "after 120s"（**日志说谎**）。现用 `powershell -NoProfile -Command
+   "Start-Sleep -Milliseconds {tick_ms}"`（不依赖网络；DETACHED 无 console ⇒ 不弹窗；
+   本机实测每拍 ≈1.29s，含 PowerShell 启动费）。机械判据：`conformance_check.py` **C-33**。
 3. **替换前先快照，且只在替换成功后轮转为备份**：旧备份是**回退源**，绝不能在新版落地前删。
 4. **检查 robocopy 退出码（>=8 = 失败）**：失败时**绝不启动新 exe**，改为从快照回铺并启动
    旧版本；回铺也失败则**不启动任何 exe**，保留快照供人工恢复，并写失败 marker。
