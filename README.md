@@ -101,6 +101,7 @@ Documented per §I-10 (declare untriggered capabilities and their reasons):
 - **Settings window (§T3)**: preferences live in the tray menu only (autostart, start-on-launch, refresh interval, quit cleanup); there is no single settings dialog.
 - **`tests/` and `release.bat`**: neither exists. The only business check is the frozen `--smoke` run inside `build.bat`, and it makes no assertions (D1-05/D3-02).
 - **Update pending idempotency (§G4-02)**: `paths.process_pending_update()` exists but is not wired into startup, so an interrupted update swap is not retried.
+- **`service_link` (§G4.2 reference state machine)**: the template ships `modules/service_link` (NONE → ADOPTED/OWNED → NONE); dsh-helper implements adoption and stop inline instead. Behavior passes review, but the shared state machine is not adopted.
 
 ## FAQ
 

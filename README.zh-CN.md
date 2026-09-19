@@ -101,6 +101,7 @@ build.bat nopause
 - **设置窗口（§T3）**：偏好项（自启、启动时启动、刷新间隔、退出清理）只存在于托盘菜单，没有统一设置对话框。
 - **`tests/` 与 `release.bat`**：两者都缺。唯一的业务检查是 `build.bat` 里的冻结 `--smoke`，且没有任何断言（D1-05/D3-02）。
 - **更新 pending 幂等（§G4-02）**：`paths.process_pending_update()` 已存在但未接入启动流程，中断的换装不会重试。
+- **`service_link`（§G4.2 参考状态机）**：模板已提供 `modules/service_link`（NONE → ADOPTED/OWNED → NONE），dsh-helper 仍是内联实现接入与停止。行为通过评审，但未采纳共享状态机。
 
 ## 常见问题
 
