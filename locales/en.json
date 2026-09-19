@@ -113,5 +113,8 @@
   "msg_process_no_response": "the process exists but the panel is not responding yet",
   "msg_taken_over": "adopted the dsh that was already running",
   "msg_starting_now": "starting…",
-  "msg_no_cmd_found": "no usable dsh.cmd found"
+  "msg_no_cmd_found": "no usable dsh.cmd found",
+  "quit_confirm_yes": "Quit",
+  "quit_confirm_no": "Cancel",
+  "dup_running": "dsh-helper is already running."
 }

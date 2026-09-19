@@ -113,5 +113,8 @@
   "msg_process_no_response": "进程存在，但面板尚未响应",
   "msg_taken_over": "已接管已运行的 dsh",
   "msg_starting_now": "正在启动…",
-  "msg_no_cmd_found": "未找到可用的 dsh.cmd"
+  "msg_no_cmd_found": "未找到可用的 dsh.cmd",
+  "quit_confirm_yes": "退出",
+  "quit_confirm_no": "取消",
+  "dup_running": "dsh-helper 已经在运行了。"
 }

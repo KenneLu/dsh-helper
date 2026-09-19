@@ -6,7 +6,9 @@
 （`reme-helper/src/main.py` 7098-7345；语义清单见 `reme-helper/UPDATE-CHAIN-REFERENCE.md`），
 不以"用的人多"为准。
 
-1.4.4（2026-09-19）：**一处同源修复**——`budget_s` 必须由**调用方那个 `limit`** 派生，
+1.4.4（2026-09-19）：**两处修复**（同一版正式注记，避免“同名异实”）。
+  * **清扫缺陷**：`TEMP_PREFIX` 去掉尾随 `-`（旧值 `f"{APP_ID}-update-"` **永远匹不到** `…-update.bat`）+ 清扫体按类型分流（`is_dir()`→`rmtree`，否则 `unlink`）——旧实现只处理目录，于是**中断的更新会永久留下一个脚本文件**，每中断一次多一个且**无声**。
+  * **同源修复**：`budget_s` 必须由**调用方那个 `limit`** 派生，
 不许传模块常量。旧写法传 `UPDATE_WAIT_BUDGET_S`（按 `UPDATE_WAIT_LIMIT=120` 算），于是
 调用方传 `limit=2` 时渲染出 `2 polls x 1000ms (nominal budget 120s)`——分母与数量级
 自相矛盾，而且它只出现在**日志**里，不会让任何门禁变红。现为
@@ -17,8 +19,8 @@
 
 1.4.3（2026-09-19）：**两处修复**（都可机械判据化，见 conformance_check C-32/C-33）：
 
-  * **等待节拍不再用 `ping`**（那是"发 ICMP 等回包"，不是睡眠）：`-n 2` + loopback 地址
-    看起来像"睡 1 秒"，在**丢弃 loopback ICMP** 的机器上实测 **9.0s/拍**（两次 4.5s 超时）
+  * **等待节拍不再用 `ping`**：`ping -n 2 127.0.0.1` 看着像“睡 1 秒”，在**丢弃 loopback ICMP**
+    的机器上实测 **9.0s/拍**（两次 4.5s 超时）
     ——名义 120s 的等待变成 ~18 分钟，而 `:giveup` 还打印 `after 120s`（**日志说谎**）。
     改成 `powershell -NoProfile -Command "Start-Sleep -Milliseconds {tick_ms}"`（ICMP-free；
     DETACHED 进程无 console，子进程不弹窗），常量拆成 `UPDATE_WAIT_LIMIT`（**轮询次数**）×

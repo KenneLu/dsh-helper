@@ -1,4 +1,4 @@
-# TEMPLATE-MODULE: i18n | TEMPLATE-VER: 2.2.0
+# TEMPLATE-FROM: my-diy-tool-template/modules/i18n/__init__.py | TEMPLATE-VER: 2.2.0
 """i18n 包门面：**不复制状态**（2.2.0）。
 
 `from .i18n import *` 会把 `LANG` 这类**可变全局拷成静态副本**：`init('en')` 之后

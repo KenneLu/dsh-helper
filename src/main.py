@@ -1436,9 +1436,13 @@ def quit_menu(icon, _item):
             # 降级链两级都在里面跑：富对话框失败就走原生 askyesno（同样在那一个线程上）。
             def _confirm():
                 try:
-                    return tray_kit.confirm_quit_dialog(APP_NAME, i18n.t("quit_checkbox"),
-                                                        bool(CFG.get("quit_stop_dsh", False)),
-                                                        on_change=_persist_quit_stop)
+                    return tray_kit.confirm_quit_dialog(
+                        APP_NAME, i18n.t("quit_checkbox"),
+                        bool(CFG.get("quit_stop_dsh", False)),
+                        on_change=_persist_quit_stop,
+                        body_text=i18n.t("quit_native_text"),
+                        confirm_text=i18n.t("quit_confirm_yes"),
+                        cancel_text=i18n.t("quit_confirm_no"))
                 except Exception as exc:
                     log(f"quit dialog failed ({type(exc).__name__}: {exc}); "
                         f"falling back to native confirm")
@@ -1758,7 +1762,10 @@ def main():
     global TRAY_ICON
     if not tray_kit.acquire_single_instance("dsh-helper", log=log):
         log("another instance is already running; exiting")
-        tray_kit.warn_duplicate_instance(APP_NAME, hint=i18n.t("dup_hint"))
+        tray_kit.warn_duplicate_instance(
+            APP_NAME,
+            message="\n\n".join([i18n.t("dup_running"),
+                                  i18n.t("dup_hint")]))
         return
     log(f"startup {APP_NAME} v{VERSION} (pid {os.getpid()})")
     # T2/C-2（paths 1.1.4，MUST-WIRE）：让"本实例的 exe 不可被删除/改名"由**内核**保证，
