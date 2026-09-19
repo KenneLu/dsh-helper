@@ -69,14 +69,22 @@ set "RUNNING_EXE="
 for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "(Get-Process -Name %APPNAME% -ErrorAction SilentlyContinue).Path | Select-Object -First 1"`) do set "RUNNING_EXE=%%p"
 set "RUNNING_DIR="
 if defined RUNNING_EXE for %%d in ("%RUNNING_EXE%") do set "RUNNING_DIR=%%~dpd"
-rem Normalize a trailing backslash WITHOUT the "last-char == backslash" string
-rem test: cmd parses the backslash-quote sequence specially and aborts the whole
-rem script with "The syntax of the command is incorrect." -- and it fires on the
-rem "no instance running" path (RUNNING_DIR undefined), i.e. the guard would break
-rem the very build it exists to protect. Measured with a probe that clears the
-rem variable: it aborts inside this block. The for-loop + tilde-fd form strips the
-rem trailing backslash for us (same idiom as the TARGET_DIR line below).
-if defined RUNNING_DIR for %%d in ("%RUNNING_DIR%") do set "RUNNING_DIR=%%~fd"
+rem Normalize RUNNING_DIR so the compare below can match: %%~dpd (above) ends WITH a
+rem trailing backslash, %%~fd (below) produces TARGET_DIR WITHOUT one. Skip this and
+rem the guard silently stops guarding -- it would let a build overwrite the directory
+rem a live instance is running from, with no error at all.
+rem
+rem Strip exactly ONE character: %%~dpd always appends the separator.
+rem
+rem NOT `if "%V:~-1%"=="\" set "V=%V:~0,-1%"`: the substring expands while cmd is
+rem still parsing the line, and with V undefined the malformed quote/backslash
+rem sequence aborts the whole script ("The syntax of the command is incorrect.",
+rem rc=255). Undefined is exactly the "no instance running" state, so that form
+rem kills the very build it exists to protect.
+rem
+rem NOT `for %%d in ("%V%") do set "V=%%~fd"` either: MEASURED, %%~fd keeps the
+rem trailing backslash, so the strip silently does nothing (guard neutered).
+if defined RUNNING_DIR set "RUNNING_DIR=%RUNNING_DIR:~0,-1%"
 set "TARGET_DIR="
 for %%d in ("%CD%\%RELEASE_DIR%") do set "TARGET_DIR=%%~fd"
 if defined RUNNING_DIR if /i "%RUNNING_DIR%"=="%TARGET_DIR%" (
