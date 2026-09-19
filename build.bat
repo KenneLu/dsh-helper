@@ -137,6 +137,23 @@ rem the build still goes green (that is how the unpinned roots were found). Pin 
 rem suite once here so that class of accident is not possible; the per-file pins stay,
 rem because a test run outside build.bat must still be isolated. Belt and braces - this
 rem does not replace them.
+rem ---------------------------------------------------------------------------
+rem R-10 / C-30 runtime half: %TEMP% residue must not GROW while the tests run.
+rem The baseline is what already existed BEFORE this build, so historical residue
+rem can never be misread as red - only directories that APPEAR during the build
+rem count as a leak. Skipped when the template repo is absent (CI checks out a
+rem single repo), same rule as the sync_check gate below. The baseline file is a
+rem build artifact and build/ is gitignored.
+rem ---------------------------------------------------------------------------
+if not exist "..\my-diy-tool-template\conformance_check.py" goto :templeak_skip
+if not exist "build" mkdir "build"
+echo [GATE] temp-leak baseline (R-10) ...
+"%PY%" "..\my-diy-tool-template\conformance_check.py" --roots %APPNAME% --temp-leak-save "build\_tmpbase.txt"
+if errorlevel 1 goto :templeak_fail
+goto :templeak_saved
+:templeak_skip
+echo [SKIP] temp-leak baseline: my-diy-tool-template not present (CI single-repo checkout)
+:templeak_saved
 set "DSH_HELPER_DATA_DIR=%CD%\build\test-data"
 echo [TEST] tests suite ...
 for %%t in (tests\test_*.py) do (
@@ -149,6 +166,22 @@ for %%t in (tests\test_*.py) do (
 )
 set "DSH_HELPER_DATA_DIR="
 if exist "%CD%\build\test-data" rmdir /s /q "%CD%\build\test-data"
+rem ---------------------------------------------------------------------------
+rem R-10 increment: only directories that appeared DURING this build count.
+rem A one-off clean-up is not evidence - it is a single point in time. Compare
+rem only against the baseline saved before the tests ran.
+rem ---------------------------------------------------------------------------
+if not exist "build\_tmpbase.txt" goto :templeak_done
+echo [GATE] temp-leak increment check (R-10) ...
+"%PY%" "..\my-diy-tool-template\conformance_check.py" --roots %APPNAME% --temp-leak-baseline "build\_tmpbase.txt"
+if errorlevel 1 goto :templeak_fail
+del /q "build\_tmpbase.txt"
+goto :templeak_done
+:templeak_fail
+echo [ERROR] temp-dir leak: %TEMP% gained NEW residue during this build (R-10).
+if not defined NOPAUSE pause
+exit /b 1
+:templeak_done
 
 rem sync_check gate: the template repo only exists on dev machines (CI checks
 rem out a single repo) - skipped there like nosmoke, local builds keep it ON.
