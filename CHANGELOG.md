@@ -36,6 +36,13 @@ this batch was rolled back to 1.8.1.
 - Frozen smoke now **dual-pins** `DSH_HELPER_DATA_DIR` + `DSH_HELPER_CONFIG`
   (the config is a throwaway copy inside smoke-data, so the shipped config is
   never rewritten) - D1 unified convention.
+- Single-instance guard probe (D3.1/C-10): `--smoke` now calls
+  `tray_kit.mutex_name_is_valid(APP_ID)`, so an illegal mutex name fails the
+  build loudly - that silent failure once kept a sibling tool dead for months
+  while every gate stayed green. `tests/test_single_instance.py` asserts the
+  probe both ways. Resynced `modules/tray_kit` to 2.1.0, and `build.bat`'s
+  VERSION parse switched to the D1 two-step form (a trailing comment can no
+  longer leak into the release path).
 - i18n / T1 (bilingual UI): adopted the template `modules/i18n` 2.1.1
   (light form) - `locales/zh.json` (base) + `locales/en.json`, flat KV,
   en falls back to zh. Every tray menu label, notification, dialog, status

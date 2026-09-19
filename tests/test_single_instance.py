@@ -56,7 +56,12 @@ check("CreateMutexW accepts the derived name", bool(h) and accept_err in (0, 183
 if h:
     k32.CloseHandle(h)   # 只探测，不持有
 
-# ② 旧非法名必须仍然失败（根因钉死）
+# ② 共享探针 tray_kit.mutex_name_is_valid（smoke 与测试问同一个判据）
+check("probe accepts the derived name", tray_kit.mutex_name_is_valid(APP_ID) is True)
+check("probe rejects the old illegal name",
+      tray_kit.mutex_name_is_valid(APP_ID, r"Local\%s\SingleInstance" % APP_ID) is False)
+
+# ③ 旧非法名必须仍然失败（根因钉死）
 ctypes.set_last_error(0)
 bad = k32.CreateMutexW(None, False, r"Local\%s\SingleInstance" % APP_ID)
 bad_err = ctypes.get_last_error()

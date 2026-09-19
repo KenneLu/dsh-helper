@@ -25,6 +25,7 @@ import pystray
 from PIL import Image, ImageDraw, ImageOps
 
 from modules import autostart, i18n, log_kit, paths, tray_kit, update_helper   # noqa: E402
+from modules.appconfig import APP_ID   # noqa: E402
 
 
 APP_NAME = "dsh-helper"
@@ -1472,8 +1473,12 @@ def build_menu():
 
 
 def smoke():
-    """构建冒烟测试：验证依赖、配置和 dsh 命令发现，不启动常驻服务。"""
+    """构建冒烟测试：验证依赖、配置、守卫探针和 dsh 命令发现，不启动常驻服务。"""
     try:
+        # D3.1 / C-10 守卫覆盖探针：名字合法性（不占锁、不弹窗）。守卫坏了 3 个月
+        # 而构建全绿的根因就是探针缺失——冒烟必须与运行期守卫问同一个名字。
+        if not tray_kit.mutex_name_is_valid(APP_ID):
+            raise RuntimeError("mutex name is illegal for %s" % APP_ID)
         command = resolve_dsh_command()
         if not command:
             for candidate in discover_dsh_command_candidates():

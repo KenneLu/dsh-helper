@@ -34,9 +34,12 @@ if errorlevel 1 (
 )
 
 rem Version single source of truth: VERSION in src\main.py (D15/D16).
-rem Backslash path: cmd splits forward-slash paths inside for /f (J pitfall).
+rem Two-step parse (D1 0.1): split on '=', then keep the first whitespace-delimited
+rem token. A trailing comment on the VERSION line would otherwise be swallowed into
+rem the version string by the old "tokens=2,*" form and mangle the release path.
 set VERSION=
-for /f "tokens=2,*" %%a in ('findstr /b /c:"VERSION = " src\main.py') do set VERSION=%%~b
+for /f "tokens=2 delims==" %%a in ('findstr /b /c:"VERSION = " src\main.py') do set VERSION=%%a
+for /f "tokens=1" %%a in ("%VERSION:"=%") do set VERSION=%%a
 if not defined VERSION (
   echo [ERROR] Cannot read VERSION from src\main.py.
   if not defined NOPAUSE pause

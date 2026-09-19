@@ -14,6 +14,8 @@
 | 名称 | 说明 |
 |---|---|
 | `acquire_single_instance(app_id, mutex_name=None, log=…)` | 命名互斥体钉死单实例；守卫自身失败时**放行**（宁可多开不能打不开） |
+| **`mutex_name_is_valid(app_id, mutex_name=None)`** | **`--smoke` 的守卫覆盖探针**（2.1.0，D3.1）：验"这个名字内核收不收"，**不占锁、不弹窗**。`ERROR_ALREADY_EXISTS` **也算合法**（名字被占用恰恰证明内核接受它），故与"此刻有没有实例在跑"无关——那是 `single_instance_free()` 的问题，拿它做冒烟断言会**假红** |
+| `single_instance_free(mutex_name)` | 探测互斥体**此刻是否空着**，不持有（诊断用）。⚠️ 用户常驻实例在跑时返回 False——**不要**拿它做冒烟断言（见上面的探针） |
 | `warn_duplicate_instance(app_name, hint=…, message=None, title=None)` | 重复启动弹窗（无 console 托盘程序 print 无人可见）；2.0.2 起文案可整体传入（i18n），不传用中文默认 |
 | `confirm_quit_dialog(app_name, checkbox_text=None, checked_init=False, parent=None, on_change=None, *, title=None, body_text=None, confirm_text="退出", cancel_text="取消")` | 退出确认框（G4.1-04/G4.2-05）；返回 `{"go","stop_service"}`，取消返回 None。2.0.2：用户可见文案全部可传参（E4-02），`checkbox_text` 空则不渲染勾选框 |
 | `make_quit_request_path(user_data_dir)` | `--quit` 请求文件路径；**纪律：必须配 T2 数据根重定向**（F11） |

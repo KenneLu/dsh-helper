@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/tray_kit/tray_kit.py | TEMPLATE-VER: 2.0.2
+# TEMPLATE-FROM: my-diy-tool-template/modules/tray_kit/tray_kit.py | TEMPLATE-VER: 2.1.0
 """T7｜托盘机制件：单实例互斥体、退出请求文件 + 监视循环、面板地址行掩码、菜单签名重画、退出确认框（2.0.0）。
+
+2.1.0：新增 **`mutex_name_is_valid(app_id, mutex_name=None)`** —— 冒烟用的**守卫覆盖探针**
+（名字合法性，不占锁、不弹窗）。来源：local-speak2text 内联版（其"守卫坏了 3 个月而构建全绿"
+的根因修复），按 D3.1 提升为公共件，让四工具一次性解决 C-10。
 
 2.0.2：`confirm_quit_dialog` / `warn_duplicate_instance` 的用户可见文案参数化
 （中文为默认值，向后兼容），满足 E4-02「词表覆盖全部用户可见文案」；
@@ -59,6 +63,40 @@ def single_instance_free(mutex_name):
     already = ctypes.get_last_error() == ERROR_ALREADY_EXISTS
     k32.CloseHandle(handle)
     return not already
+
+
+def mutex_name_is_valid(app_id, mutex_name=None):
+    """探针：这个名字**内核收不收**（`--smoke` 的守卫覆盖用）。返回 True/False。
+
+    与 `single_instance_free()` 的区别（两者都"不持有锁"，问题不同）：
+      * `single_instance_free` 问"此刻别处有没有实例在跑"——用户常驻实例在跑时它是 False，
+        拿它做冒烟断言会**假红**；
+      * 本函数问"**这个名字合法吗**"——`ERROR_ALREADY_EXISTS` **也算合法**（名字被占用恰恰
+        证明内核接受了它），故与"有没有实例在跑"无关。
+
+    为什么冒烟要用探针而不是真跑守卫（D3.1 的正确形态）：
+      * 真跑守卫一旦遇到用户常驻实例，会走"重复启动"分支 → `warn_duplicate_instance()`
+        弹**模态**对话框 → **无人值守的构建被挂死**（比失败更糟：CI 卡住而不是变红）。
+        本轮是家族第二次踩这个形状（第一次是 l-s2t 的 `test_startup_path.py`）。
+      * 而冒烟真正要打的故障是**名字非法**（SINGLE-01：名里含第二个反斜杠 ⇒ `CreateMutexW`
+        恒失败 ⇒ 被当成"已有实例" ⇒ 工具打不开，而构建全绿活了 3 个月）。
+
+    失败方向与守卫一致：非 Windows 或内核不可用 ⇒ **放行**（宁可漏判，不可把工具判死）。
+    """
+    if os.name != "nt":
+        return True
+    try:
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+        k32.CreateMutexW.restype = wintypes.HANDLE
+        ctypes.set_last_error(0)   # 防上一次的 183 被误读（l-s2t 实测教训）
+        handle = k32.CreateMutexW(None, False, mutex_name or f"Local\\{app_id}-single-instance")
+        err = ctypes.get_last_error()
+        if handle:
+            k32.CloseHandle(handle)  # 只探测，不持有
+        return bool(handle) and err in (0, ERROR_ALREADY_EXISTS)
+    except Exception:
+        return True
 
 
 def confirm_quit_dialog(app_name, checkbox_text=None, checked_init=False,
