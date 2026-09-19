@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/tray_kit/tray_kit.py | TEMPLATE-VER: 2.0.1
+# TEMPLATE-FROM: my-diy-tool-template/modules/tray_kit/tray_kit.py | TEMPLATE-VER: 2.0.2
 """T7｜托盘机制件：单实例互斥体、退出请求文件 + 监视循环、面板地址行掩码、菜单签名重画、退出确认框（2.0.0）。
+
+2.0.2：`confirm_quit_dialog` / `warn_duplicate_instance` 的用户可见文案参数化
+（中文为默认值，向后兼容），满足 E4-02「词表覆盖全部用户可见文案」；
+`checkbox_text` 为空/None 时不再渲染空勾选框。
 
 蓝本：reme-helper（三循环/签名重画/退出纪律，执行文档 F13/D13/D14）与
 local-speak2text（单实例/退出请求文件）。纯函数库：不依赖具体工具，导入即用。
@@ -57,11 +61,14 @@ def single_instance_free(mutex_name):
     return not already
 
 
-def confirm_quit_dialog(app_name, checkbox_text, checked_init, parent=None, on_change=None):
+def confirm_quit_dialog(app_name, checkbox_text=None, checked_init=False,
+                        parent=None, on_change=None, *, title=None, body_text=None,
+                        confirm_text="退出", cancel_text="取消"):
     """退出确认 + 清理勾选对话框（G4.1 条款 4 / G4.2 条款 5；交互形态 = reme-helper 蓝本）。
 
-    形态（家族标准，勿各自发挥）：标题 = app_name；正文「确定退出 <app_name>？
-    勾选项会记住，下次退出沿用。」；单个 Checkbutton；退出钮红底 #E5534B flat 在左、
+    形态（家族标准，勿各自发挥）：标题 = title 或 app_name；正文默认「确定退出
+    <app_name>？勾选项会记住，下次退出沿用。」（无勾选项时为「确定退出 <app_name>？」）；
+    checkbox_text 非空才渲染单个 Checkbutton；退出钮红底 #E5534B flat 在左、
     取消 width=10 在右并持默认焦点；屏幕垂直 1/3 居中；模态 grab_set；
     Esc/关窗 = 取消（不退出）。
 
@@ -69,6 +76,10 @@ def confirm_quit_dialog(app_name, checkbox_text, checked_init, parent=None, on_c
     Tk 根，wait_window 后销毁——对话框生命周期完全属于调用线程）。
     on_change(bool)：勾选状态一变即回调（2026-09-18 用户定：持久化跟随勾选动作，
     不等「退出」点击——点取消也已留存）。调用方在此落盘。
+
+    2.0.2（E4-02）：本函数是纯机制件，**不得硬编码用户可见文案**——启用 i18n 的工具
+    经 title/body_text/confirm_text/cancel_text 传入 t() 词条；不传则用中文默认值，
+    老调用点行为不变。checkbox_text 为空/None 时不再渲染空勾选框（l-s2t 形态）。
     返回 {"go": bool, "stop_service": bool}；取消返回 None。富对话框失败由调用方走
     降级链（原生 askyesno → 放行且默认不清理），本函数不吞异常。
     """
@@ -81,34 +92,41 @@ def confirm_quit_dialog(app_name, checkbox_text, checked_init, parent=None, on_c
         _temp_root = tk.Tk()
         _temp_root.withdraw()
         win = tk.Toplevel(_temp_root)
-    win.title(app_name)
+    win.title(title or app_name)
     win.attributes("-topmost", True)
     win.resizable(False, False)
-    result = {"go": False, "stop_service": bool(checked_init)}
+    has_checkbox = bool(checkbox_text)
+    result = {"go": False, "stop_service": bool(checked_init) and has_checkbox}
 
     body = tk.Frame(win)
     body.pack(padx=18, pady=(14, 6))
-    tk.Label(body, text=f"确定退出 {app_name}？勾选项会记住，下次退出沿用。",
-             justify="left", wraplength=380).pack(anchor="w")
-    opts = tk.Frame(win)
-    opts.pack(anchor="w", padx=18, pady=(6, 0))
-    var = tk.BooleanVar(master=win, value=result["stop_service"])
-    _cb_cmd = (lambda: on_change(bool(var.get()))) if on_change else None
-    tk.Checkbutton(opts, text=checkbox_text, variable=var,
-                   command=_cb_cmd).pack(anchor="w")
+    if body_text is None:
+        body_text = (f"确定退出 {app_name}？勾选项会记住，下次退出沿用。"
+                     if has_checkbox else f"确定退出 {app_name}？")
+    tk.Label(body, text=body_text, justify="left",
+             wraplength=380).pack(anchor="w")
+    var = None
+    if has_checkbox:
+        opts = tk.Frame(win)
+        opts.pack(anchor="w", padx=18, pady=(6, 0))
+        var = tk.BooleanVar(master=win, value=result["stop_service"])
+        _cb_cmd = (lambda: on_change(bool(var.get()))) if on_change else None
+        tk.Checkbutton(opts, text=checkbox_text, variable=var,
+                       command=_cb_cmd).pack(anchor="w")
     btns = tk.Frame(win)
     btns.pack(pady=(8, 12))
 
     def confirm():
-        result.update(go=True, stop_service=bool(var.get()))
+        result.update(go=True,
+                      stop_service=bool(var.get()) if var is not None else False)
         win.destroy()
 
     def cancel():
         win.destroy()
 
-    quit_btn = tk.Button(btns, text="退出", command=confirm, width=10,
+    quit_btn = tk.Button(btns, text=confirm_text, command=confirm, width=10,
                          bg="#E5534B", fg="#FFFFFF", relief="flat")
-    cancel_btn = tk.Button(btns, text="取消", command=cancel, width=10)
+    cancel_btn = tk.Button(btns, text=cancel_text, command=cancel, width=10)
     quit_btn.pack(side="left", padx=8)
     cancel_btn.pack(side="left", padx=8)
     cancel_btn.focus_set()
@@ -124,11 +142,17 @@ def confirm_quit_dialog(app_name, checkbox_text, checked_init, parent=None, on_c
     return result or None
 
 
-def warn_duplicate_instance(app_name, hint="请看任务栏右下角通知区域里的图标。"):
-    """无 console 托盘程序的重复启动提示：print 没人看得见，用弹窗。"""
+def warn_duplicate_instance(app_name, hint="请看任务栏右下角通知区域里的图标。",
+                            message=None, title=None):
+    """无 console 托盘程序的重复启动提示：print 没人看得见，用弹窗。
+
+    2.0.2（E4-02）：文案可整体经 message/title 传入（i18n 工具传 t() 词条）；
+    不传则用中文默认值，老调用点行为不变。
+    """
+    text = message if message is not None else (
+        f"{app_name} 已经在运行了。\n\n{hint}\n本次启动已取消。")
     try:
-        ctypes.windll.user32.MessageBoxW(
-            None, f"{app_name} 已经在运行了。\n\n{hint}\n本次启动已取消。", app_name, 0x40)
+        ctypes.windll.user32.MessageBoxW(None, text, title or app_name, 0x40)
     except Exception:
         pass
 

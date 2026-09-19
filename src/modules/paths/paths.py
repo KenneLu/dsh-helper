@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/paths/paths.py | TEMPLATE-VER: 1.1.2
+# TEMPLATE-FROM: my-diy-tool-template/modules/paths/paths.py | TEMPLATE-VER: 1.1.3
 """T2｜路径与数据区（蓝本 local-speak2text/paths.py）。
 
 四个位置，职责分明：APP_DIR 程序本体；RUN_DIR 本次运行的包；USER_DATA_DIR 用户
@@ -9,6 +9,8 @@
 
 1.1.2：dev 态锚定改为「向上查找 main.py 所在目录的上一级（仓库根）」——家族统一
 src/main.py + src/modules/ 布局后，本文件不再依赖自身所在深度。
+1.1.3：补 `<APP_ID 派生>_CONFIG` 环境变量（CONFIG_PATH 可被显式钉死）——兑现
+README 早已承诺的接口，消除「模板相对蓝本功能回退」（CONFORMANCE §4.1.5）。
 """
 import os
 import shutil
@@ -30,10 +32,15 @@ RUN_DIR = APP_DIR
 _DATA_ROOT = Path(
     os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share"
 )
-# F11：整个数据根可重定向——测试实例设 <APP_ID>_DATA_DIR 指向临时目录即可与生产完全隔离
-USER_DATA_DIR = Path(os.environ.get(f"{APP_ID.upper().replace('-', '_')}_DATA_DIR") or _DATA_ROOT) / APP_ID
+# 环境变量前缀：连字符转下划线（B3/NAME-10，如 dsh-helper -> DSH_HELPER）
+_ENV_PREFIX = APP_ID.upper().replace("-", "_")
+# F11：整个数据根可重定向——测试实例设 <APP_ID 派生>_DATA_DIR 指向临时目录即可与生产完全隔离
+USER_DATA_DIR = Path(os.environ.get(f"{_ENV_PREFIX}_DATA_DIR") or _DATA_ROOT) / APP_ID
 
-CONFIG_PATH = USER_DATA_DIR / "config.json"
+# 1.1.3：配置文件位置可被 <APP_ID 派生>_CONFIG 显式钉死（测试/便携；l-s2t 蓝本同款语义）
+_CONFIG_OVERRIDE = os.environ.get(f"{_ENV_PREFIX}_CONFIG")
+CONFIG_PATH = (Path(_CONFIG_OVERRIDE).expanduser() if _CONFIG_OVERRIDE
+               else USER_DATA_DIR / "config.json")
 LEGACY_CONFIG_PATH = APP_DIR / "config.json"   # 旧位置（exe 旁），仅播种时读一次
 
 LOG_DIR = USER_DATA_DIR / "log"

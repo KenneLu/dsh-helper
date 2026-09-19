@@ -28,7 +28,7 @@ from modules import autostart, log_kit, paths, tray_kit, update_helper   # noqa:
 
 
 APP_NAME = "dsh-helper"
-VERSION = "1.8.1"
+VERSION = "1.8.2"
 APP_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 # 用户数据区/配置/日志/更新暂存：唯一出处是 T2 paths（数据区住 LOCALAPPDATA，
 # 1.6 及以前的 exe 旁旧配置由播种自动迁入）。

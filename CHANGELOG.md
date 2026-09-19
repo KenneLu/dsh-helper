@@ -3,26 +3,31 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
-## Unreleased
+## 1.8.2
 
-Version tier pending owner confirmation (D16): drafted as +0.0.1 (1.8.1 -> 1.8.2);
-the number and this section name land only after sign-off (team-lead ruling).
+Patch release (owner ruling, D15: +0.0.1).
 
 - Autostart (G4.1): the inline Run-key code was replaced by the family
   template module `modules/autostart` (T3, template 1.1.1, byte-identical
-  copy; sync_check now gates it). Packaged builds now prefer the stable
-  install location (`%LOCALAPPDATA%\dsh-helper\app\dsh-helper.exe`) when it
-  exists instead of always pinning the current package folder, so a version
-  folder change no longer breaks autostart.
+  copy; sync_check gates it). Packaged builds now prefer the stable install
+  location (`%LOCALAPPDATA%\dsh-helper\app\dsh-helper.exe`) when it exists
+  and fall back to the current exe otherwise.
 - Autostart self-heal (G4.1-3/5): `migrate_autostart()` runs at startup and
   silently rewrites a Run value whose exe no longer exists (old package
-  folder deleted) - verified against a seeded dead link. When the value is
-  absent the call is a strict no-op: it never creates a new autostart entry.
+  folder deleted) - verified against a seeded dead link on the frozen build.
+  When the value is absent the call is a strict no-op: it never creates a
+  new autostart entry.
 - Single source of truth (F2-01): the `autostart` key was removed from
   `config.json`; the registry value is now the only state, so the config and
   the Run key can no longer disagree.
 - Build gate: `src\modules\autostart\autostart.py` added to the py_compile
-  step so the new module is import-covered.
+  step; `paths.py`/`tray_kit.py` copies resynced to template 1.1.3 / 2.0.2
+  (mechanism-only, call sites unchanged).
+- Honest limitation: **the full stable-install mechanism (G4.1-1) is still
+  not implemented** - nothing installs a build into `...\app\`, so on a
+  machine without that folder autostart falls back to the versioned
+  `release\dsh-helper-<version>\` path and a folder change can still strand
+  it. Tracked in the README "known gaps" section.
 
 ## 1.8.1
 
