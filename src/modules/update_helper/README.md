@@ -62,7 +62,9 @@
 7. **空暂存包在动手之前就拦下**（1.4.0）：暂存目录里没有 exe 时**绝不**开始拷贝——
    `robocopy /e /purge` 从空源返回 0–7，会把**安装目录清空**；随后的
    `start ""` 指向不存在的 exe 会弹出**没人能关的模态错误框**，bat 卡死。
-   拦截后不碰安装目录、写 marker、把旧版本拉回来。
+   拦截后不碰安装目录、写 marker、把旧版本拉回来；**暂存整包保留**（1.4.1 起走
+   `:cleanup_keep`，与 `:install_failed` 同一规则：失败要留现场给人工看）——
+   回收交给启动期的 `sweep_stale_update_dirs()`（只清一小时前的）。
 8. **每处 `start` 之前都有存在性守卫**（1.4.0）：回铺后 exe 仍不在 ⇒ 不启动（进 `:install_dead`）。
    启动一个不存在的 exe 是这套脚本里唯一会"卡死到永远"的动作。
 
@@ -74,6 +76,13 @@
 - CI 坑：`--specpath build` 时相对 `--add-data` 按 spec 目录解析 → 用 `$pwd\dir` 绝对路径。
 
 ## 采纳步骤
+
+<!-- 下面三个符号是 C-27「采纳 = 拷贝 + 接线」的机械判据锚点：
+     README 里声明"必须调用"，检查器就在**工具代码**里找引用；只在 README 出现不算接线。
+     反面教材：dsh/ocx 曾把三件拷到位（哈希全绿）而 sweep/pop 零引用——失败通知永不触发。 -->
+<!-- MUST-WIRE: sweep_stale_update_dirs -->
+<!-- MUST-WIRE: pop_failed_update_note -->
+<!-- MUST-WIRE: launch_pending_cmd -->
 
 1. `appconfig.py` 填 `APP_ID / REPO_OWNER / REPO_NAME / EXE_NAME`；
 2. 拷 `update_helper.py`（**零修改**）；

@@ -135,6 +135,14 @@ check("failed-update note is surfaced through the i18n table",
 check("log written inside the isolated data dir", str(LOG_PATH).startswith(_TMP),
       str(LOG_PATH))
 
+# 程序本体目录只有一个来源（paths.APP_DIR）：main.py 曾自行再派生一份（开发态 = src/），
+# 冻结态碰巧重合所以从未暴露；dev 下 ICON_ASSET 取不到、_load_icon_base() 静默走兜底图。
+# §B1 dev 态锚定纪律要求路径断言落在测试里，而不是靠人记得。
+from modules.paths import APP_DIR as _PATHS_APP_DIR  # noqa: E402
+check("APP_DIR has a single source (paths, not a local re-derivation)",
+      M.APP_DIR == _PATHS_APP_DIR, "%s vs %s" % (M.APP_DIR, _PATHS_APP_DIR))
+check("icon asset resolves in dev mode", Path(M.ICON_ASSET).is_file(), str(M.ICON_ASSET))
+
 shutil.rmtree(_TMP, ignore_errors=True)
 print("STARTUP PATH TEST " + ("FAILED: " + ",".join(FAILS) if FAILS else "OK"), flush=True)
 sys.exit(1 if FAILS else 0)

@@ -30,10 +30,13 @@ from modules.appconfig import APP_ID   # noqa: E402
 
 APP_NAME = "dsh-helper"
 VERSION = "1.8.1"
-APP_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-# 用户数据区/配置/日志/更新暂存：唯一出处是 T2 paths（数据区住 LOCALAPPDATA，
+# 程序本体目录**不在本文件派生**：唯一出处是 T2 paths 的 APP_DIR（打包后 = exe 所在
+# 目录，开发态 = 仓库根）。这里曾另有一份同名派生量（开发态 = src/），与 paths 分叉，
+# 只在冻结态碰巧重合——于是 dev 下 ICON_ASSET 解析成 src/resources/img/… 取不到，
+# _load_icon_base() 静默走兜底图，而构建与冒烟全绿。
+# 用户数据区/配置/日志/更新暂存同样出自 T2 paths（数据区住 LOCALAPPDATA，
 # 1.6 及以前的 exe 旁旧配置由播种自动迁入）。
-from modules.paths import (CONFIG_PATH, LEGACY_CONFIG_PATH, LOG_DIR, LOG_PATH,
+from modules.paths import (APP_DIR, CONFIG_PATH, LEGACY_CONFIG_PATH, LOG_DIR, LOG_PATH,
                            UPDATE_DIR, USER_DATA_DIR)
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 URL_RE = re.compile(r"https?://(?:127\.0\.0\.1|localhost):([0-9]{1,5})(?:/[^\s]*)?", re.I)
@@ -82,6 +85,11 @@ STATUS_REFRESH_INTERVAL_CHOICES = (
 STATUS_REFRESH_INTERVAL_VALUES = {seconds for seconds, _label in STATUS_REFRESH_INTERVAL_CHOICES}
 DEFAULT_STATUS_REFRESH_INTERVAL_SEC = 60
 VALIDATION_FAILURE_NOTIFY_DELAY_SEC = 2.0
+# `dsh.cmd web --help` 的超时。dsh.cmd 是 Node CLI，冷启动要加载插件：本机实测
+# 7.7–11.0s（2026-09-19 三次连测）。原先写 10s，正好卡在实测区间中段 —— 冻结冒烟
+# 于是随机红/绿，而报错只说"校验失败"，看起来像环境坏了而不是超时太紧。
+# 宁可多等（校验跑在后台线程 + "正在校验…"通知），也不要一个会自己抖的门禁。
+DSH_CMD_VALIDATE_TIMEOUT_SEC = 30
 # 默认固定端口：与 dsh web 官方兜底端口（3080）一致；该端口被占用时本次回退为自动端口。
 DEFAULT_PORT = 3080
 
@@ -1152,7 +1160,7 @@ def validate_dsh_command(path):
             errors="replace",
             creationflags=CREATE_NO_WINDOW,
             cwd=str(candidate.parent),
-            timeout=10,
+            timeout=DSH_CMD_VALIDATE_TIMEOUT_SEC,
         )
     except subprocess.TimeoutExpired:
         return False, i18n.t("err_validate_timeout")

@@ -1,4 +1,4 @@
-# TEMPLATE-MODULE: update_helper | TEMPLATE-VER: 1.4.0
+# TEMPLATE-MODULE: update_helper | TEMPLATE-VER: 1.4.2
 """update_helper 包门面：**不复制状态**（1.1.0 起；1.4.0 起子模块侧也没有标量可绑）。
 
 `from .update_helper import *` 会把 `UPDATE_READY` / `PENDING_CMD` 拷成**静态副本**：

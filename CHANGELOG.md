@@ -10,6 +10,29 @@ that dev work lands as local commits only and the version changes only when a
 release is cut (STANDARDS "发版节奏" clause 7). The 1.8.2 bump made earlier in
 this batch was rolled back to 1.8.1.
 
+- **`APP_DIR` now has exactly one source** (`paths.APP_DIR`). `main.py` used to derive
+  its own copy - right when frozen (the exe dir) but `src/` in dev, where `paths` says
+  the repo root. The two only had to agree in the packaged build, so the split stayed
+  invisible: in dev `ICON_ASSET` resolved to `src/resources/img/...`, which does not
+  exist, and `_load_icon_base()` silently fell back to the hand-drawn placeholder while
+  every gate stayed green. The local definition is gone and `APP_DIR` is imported from
+  `modules.paths` with the rest of the paths; `resources/` lives at the repo root, which
+  is also what `--add-data` bundles.
+- **The frozen smoke's `dsh.cmd` validation no longer flips on timing.**
+  `validate_dsh_command` allowed 10 s for `dsh.cmd web --help`, but a Node cold start
+  with its plugins takes **7.7-11.0 s** on this machine (three consecutive
+  measurements), so the gate landed mid-range and went red at random while reporting
+  only "validation failed" - which reads as a broken environment rather than a tight
+  timeout. Now a named `DSH_CMD_VALIDATE_TIMEOUT_SEC = 30`. Validation already runs on a
+  background thread behind a "validating..." notification, so the extra headroom costs
+  only patience.
+- Tests: `test_startup_path.py` pins both halves of the `APP_DIR` fix - it is the same
+  object as `modules.paths.APP_DIR`, and the icon asset really is a file in dev mode.
+- Template resync: `modules/update_helper` -> 1.4.2 (1.4.1 made `:stage_invalid` preserve
+  the scene like `:install_failed`; 1.4.2 guards the third `start` - the one after a
+  restore - because "the restore did not error" is not "the exe is back"). `.py` and
+  `README.md` copied; the `.py` header re-stamped with the new TEMPLATE-VER.
+
 - Update housekeeping is now actually wired in (T4 收尾): `sweep_stale_update_dirs()`
   runs at startup and removes `<APP_ID>-update-*` staging dirs that an interrupted
   updater left in %TEMP% (only those older than 1 h, so an in-flight update is never

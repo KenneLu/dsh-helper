@@ -1,10 +1,20 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/update_helper/update_helper.py | TEMPLATE-VER: 1.4.0
+# TEMPLATE-FROM: my-diy-tool-template/modules/update_helper/update_helper.py | TEMPLATE-VER: 1.4.2
 """T4｜在线更新三段式：查（GitHub Releases）→ 下（zip + sha256）→ 换（退出后铺目录并重启）。
 
 **基准**：本件按用户仲裁规则（STANDARDS B4）以 reme-helper 的**已验证更新链**为准
 （`reme-helper/src/main.py` 7098-7345；语义清单见 `reme-helper/UPDATE-CHAIN-REFERENCE.md`），
 不以"用的人多"为准。
+
+1.4.2（2026-09-19）：补**第三处** `start` 的守卫（`:install_failed` 回铺之后）。前三轮只盯了
+"暂存包为空"与"拷完缺 exe"两条路，而**回铺成功（rc<8）也可能没铺出 exe**（快照本身就缺）——
+`start` 于是指向不存在的文件 ⇒ 同一个模态框卡死。**每一条通往 `start` 的分支都要自己验一次**，
+别处有守卫不构成这条分支的证明。
+
+1.4.1（2026-09-19）：`:stage_invalid`（暂存包里没有 exe）改为走 **`:cleanup_keep`**——
+与 `:install_failed` 同一条规则：**失败要保留现场**。此前它走 `:cleanup`，把可疑的暂存整包删掉了，
+只剩 marker 与日志；现场（"到底暂存了什么"）恰恰是人工排查最想要的东西。只多占一份暂存，
+启动期的 `sweep_stale_update_dirs()` 会在一小时后回收。
 
 1.4.0（2026-09-19）：照该基准清单 §9 第 1、2 条，把两件事做成**结构上不可能再犯**——
 而不是继续靠约定挡着：
@@ -163,7 +173,10 @@ rem non-existent exe is the one thing that must never happen (modal box -> hang)
 > "%FAILED%" echo update failed {stamp}: staged package has no {exe}
 echo [{stamp}] STAGE INVALID - no {exe} in stage; install untouched >> "%LOG%"
 if exist "{newexe}" start "" "{newexe}"
-goto cleanup
+rem KEEP the scene (goto cleanup_keep, not cleanup): same rule as :install_failed.
+rem The staged package looked wrong - a human may want to see WHAT was staged before
+rem the 1h sweep reclaims it. Only the poll file and this script are removed.
+goto cleanup_keep
 :install_failed
 rem robocopy: 0-7 = success, >=8 = failure. On failure NEVER start the new exe; restore the
 rem previous version from the snapshot so the tool comes back, and leave a marker for the app.
@@ -171,6 +184,11 @@ rem previous version from the snapshot so the tool comes back, and leave a marke
 echo [{stamp}] INSTALL FAILED rc=%RC% - restoring from snapshot >> "%LOG%"
 robocopy "%SNAPSHOT%" "%TARGET%" /e /purge /njh /njs /nfl /ndl >> "%LOG%" 2>&1
 if errorlevel 8 goto install_dead
+rem rc<8 means "the restore did not error", NOT "the exe is now there" - the snapshot
+rem itself can be missing it. EVERY path that reaches a start must verify on its own:
+rem a guard elsewhere does not prove this branch. Without this line this is a third
+rem "start on a missing exe -> modal box -> hang" entry point (reviewer, 2026-09-19).
+if not exist "{newexe}" goto install_dead
 echo [{stamp}] restored - starting previous version >> "%LOG%"
 start "" "{newexe}"
 goto cleanup_keep
