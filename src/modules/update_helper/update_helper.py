@@ -1,10 +1,22 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/update_helper/update_helper.py | TEMPLATE-VER: 1.4.2
+# TEMPLATE-MODULE: update_helper | TEMPLATE-VER: 1.4.3
 """T4｜在线更新三段式：查（GitHub Releases）→ 下（zip + sha256）→ 换（退出后铺目录并重启）。
 
 **基准**：本件按用户仲裁规则（STANDARDS B4）以 reme-helper 的**已验证更新链**为准
 （`reme-helper/src/main.py` 7098-7345；语义清单见 `reme-helper/UPDATE-CHAIN-REFERENCE.md`），
 不以"用的人多"为准。
+
+1.4.3（2026-09-19）：**两处修复**（都可机械判据化，见 conformance_check C-32/C-33）：
+
+  * **等待节拍不再用 `ping`**：`ping -n 2 127.0.0.1` 看着像"睡 1 秒"，在**丢弃 loopback ICMP**
+    的机器上实测 **9.0s/拍**（两次 4.5s 超时）——名义 120s 的等待变成 ~18 分钟，而 `:giveup`
+    还打印 `after 120s`（**日志说谎**）。改成 `powershell -NoProfile -Command "Start-Sleep
+    -Milliseconds {tick_ms}"`（ICMP-free；DETACHED 进程无 console，子进程不弹窗），常量拆成
+    `UPDATE_WAIT_LIMIT`（**轮询次数**）× `UPDATE_WAIT_TICK_MS`（每拍毫秒），超时行报告
+    `%tries% polls x {tick_ms}ms (...) lower bound`——**不再打印没人量过的"秒"**。
+  * **`pop_failed_update_note` 改成"先报告、最后删证据"**（C-32）：旧顺序在 `unlink` 抛
+    OSError 时走 except 直接 `return ""`，detail 明明读到了用户却看不到提示；调用边界上的
+    错误（arity/签名不符）更是连 `except OSError` 都拦不住。删不掉就留给下次再报。
 
 1.4.2（2026-09-19）：补**第三处** `start` 的守卫（`:install_failed` 回铺之后）。前三轮只盯了
 "暂存包为空"与"拷完缺 exe"两条路，而**回铺成功（rc<8）也可能没铺出 exe**（快照本身就缺）——
@@ -79,8 +91,17 @@ REPO = f"{REPO_OWNER}/{REPO_NAME}"
 # 检查节流窗口（进程内：见 check_update 的说明——跨进程不生效，别把它当持久化配额保护）
 CHECK_INTERVAL = 24 * 3600
 
-# 等旧进程退出的上限：120 次 × 约 1 秒（`ping -n 2` 的节奏）——reme 实测值
+# 等旧进程退出的上限：**轮询次数** × **每拍毫秒**（两个数必须一起看，别把次数当秒）。
+#   `UPDATE_WAIT_LIMIT`   = 轮询次数
+#   `UPDATE_WAIT_TICK_MS` = 每拍睡眠毫秒（脚本里由 `powershell Start-Sleep` 实现）
+#   `UPDATE_WAIT_BUDGET_S`= 名义预算 = 次数 × 每拍 ÷ 1000（**下界**：每拍还要付 PowerShell 启动费）
+# ⚠️ 2026-09-19 缺陷（五份都在）：节拍原是 `ping -n 2 127.0.0.1`，本意"睡 1 秒"，在**丢弃
+# loopback ICMP** 的机器上实测 **9.0 s/拍**（两次 4.5s 超时）→ 名义 120s 实际约 18 分钟，
+# 而 `:giveup` 还打印 "after 120s"——**日志说谎**。教训：等待/超时的单位假设**必须实测量过**；
+# 禁止 ping 当节拍已升级为机械判据 C-33。
 UPDATE_WAIT_LIMIT = 120
+UPDATE_WAIT_TICK_MS = 1000
+UPDATE_WAIT_BUDGET_S = UPDATE_WAIT_LIMIT * UPDATE_WAIT_TICK_MS // 1000
 # %TEMP% 下暂存目录/脚本的识别前缀
 TEMP_PREFIX = f"{APP_ID}-update-"
 # 更新器失败时留的 marker 文件名（落在 update_dir 的父目录，即用户数据区）
@@ -142,7 +163,15 @@ find /i "{exe}" "%POLL%" >nul
 if errorlevel 1 goto gone
 set /a tries+=1
 if %tries% geq {limit} goto giveup
-ping -n 2 127.0.0.1 >nul
+rem Sleep one tick. NOT `ping -n 2 127.0.0.1`: that idiom means "1 second" only when
+rem loopback ICMP answers - on a machine that drops it, each tick costs 2 x 4.5s
+rem timeout = 9.0s (measured), so a nominal 120s budget really took ~18 minutes
+rem while the log still said "120s". Start-Sleep is ICMP-free; it does pay a
+rem PowerShell startup (~0.3s here, measured 1.29s per 1000ms tick), which is why
+rem the timeout line below reports a lower bound instead of a precise total.
+rem Spawned from a DETACHED_PROCESS bat, so the child has no console and no window
+rem appears (same reason `tasklist`/`find` in this file stay windowless).
+powershell -NoProfile -Command "Start-Sleep -Milliseconds {tick_ms}" >nul 2>nul
 goto wait
 :gone
 rem Guard the staged package BEFORE touching the install dir. An empty/exe-less STAGE can
@@ -196,7 +225,11 @@ goto cleanup_keep
 echo [{stamp}] RESTORE FAILED - not starting; snapshot kept at %SNAPSHOT% >> "%LOG%"
 goto cleanup_keep
 :giveup
-echo [{stamp}] aborted: {exe} still running after {limit}s >> "%LOG%"
+rem Report the poll count and the per-tick sleep, not a fake "seconds" figure: the
+rem real elapsed time is >= {limit} x {tick_ms}ms because every tick also pays a
+rem PowerShell startup. The old wording said "after 120s" while it had actually
+rem been waiting ~18 minutes - a log that lies is worse than no log.
+echo [{stamp}] aborted: {exe} still running after %tries% polls x {tick_ms}ms (nominal budget {budget_s}s, lower bound) >> "%LOG%"
 goto cleanup
 :cleanup
 rem Runs on the success path: without it the staged package (~50MB/update) stays behind
@@ -363,7 +396,8 @@ def build_apply_script(target_dir, stage_dir, work_dir, backup_dir, log_path,
         target=target_dir, stage=stage_dir, work=work_dir, backup=backup_dir,
         snapshot=snapshot_dir, failed=failed_marker, log=log_path,
         exe=EXE_NAME, newexe=os.path.join(str(target_dir), EXE_NAME),
-        limit=limit, stamp=time.strftime("%Y-%m-%d %H:%M:%S"),
+        limit=limit, tick_ms=UPDATE_WAIT_TICK_MS, budget_s=UPDATE_WAIT_BUDGET_S,
+        stamp=time.strftime("%Y-%m-%d %H:%M:%S"),
     )
 
 
@@ -377,17 +411,27 @@ def pop_failed_update_note(update_dir, log=lambda *a: None):
 
     托盘已退出、更新器也自删了，**失败只能等下次启动说**——这是 reme 已验证的可见性机制。
     读取失败不抛（不该拦住启动）。
+
+    **顺序：先算文案 → 先报告 → 最后才删证据**（2026-09-19 修，C-32）。旧写法把
+    `marker.unlink()` 与 `read_text()` 放在同一个 try 里：`unlink` 抛 OSError（marker 被
+    Defender/索引器短暂锁定——本仓库实测过）会走 except 直接 `return ""`，**detail 明明
+    已经读到了，用户却看不到升级失败提示**；更糟的是**调用边界上的错误**（arity/签名不符、
+    属性不存在）在进入被调方之前就抛出，`except OSError` 根本拦不住，证据已删、日志无声。
+    删不掉不该惩罚读者：留给下次启动再报一次即可。
     """
     marker = failed_marker_path(update_dir)
     try:
         if not marker.is_file():
             return ""
         detail = marker.read_text(encoding="utf-8", errors="replace").strip()
-        marker.unlink()
     except OSError as exc:
         log("failed-update marker read error:", exc)
         return ""
     log("previous update failed:", detail)
+    try:
+        marker.unlink()
+    except OSError as exc:
+        log("failed-update marker not removed (will report again):", exc)
     return ("上次自动更新失败，已回退到原版本并保留现场；详见 update.log"
             + (f"（{detail}）" if detail else ""))
 
