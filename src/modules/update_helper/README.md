@@ -25,21 +25,26 @@
 | **`pop_failed_update_note(update_dir, log=…)`** | 启动时读一次上次失败 marker，返回人话（无则空串）并删除（1.3.0）。读到就通知用户 |
 | **`sweep_stale_update_dirs(max_age=3600)`** | 清 %TEMP% 里被中断的更新暂存（只清一小时前的），返回个数（1.2.0） |
 | **`verify_zip_sha256(zip_path, sha_text)`** | 纯函数校验，返回 `(ok, 人话)`；**期望值为空也算失败**（1.3.0） |
+| **`launch_pending_cmd(cmd=None, log=…)`** | 退出收尾**由此拉起**替换脚本：`CREATE_NO_WINDOW \| DETACHED_PROCESS`，返回是否已拉起（1.4.0）。别自己写 `os.system('start …')` |
 | `http_error_hint(exc)` / `failed_marker_path(update_dir)` / `build_apply_script(…)` | 配额人话 / marker 路径 / 脚本生成（纯函数，供回归断言） |
-| `UPDATE_READY` / `PENDING_CMD` | 同上的**内部状态**；保留兼容，外部请改用访问器 |
+| `UPDATE_READY` / `PENDING_CMD` | 兼容别名，**只读派生**（1.4.0）：模块里没有这两个全局，由 PEP 562 `__getattr__` 现算。外部请改用访问器 |
 
-> **状态一律经访问器读取（1.1.0 硬性口径，同 i18n 2.1.1）**：包门面
-> （`modules/update_helper/__init__.py`）**不做 `import *`**——那会把 `UPDATE_READY` /
-> `PENDING_CMD` 拷成静态副本，函数里 `global` 重绑的是子模块那份，外部读包**永远拿到
-> 导入时的 None**：替换脚本永不拉起（更新装了等于没装），"下载并更新"永久灰着，
-> **且无任何报错**。实现为"只绑函数 + PEP 562 `__getattr__` 委派子模块"。
-> 回归：`python my-diy-tool-template/conformance_check.py --selftest`（C-21 正/反样本）。
+> **状态一律经访问器读取（1.1.0 硬性口径；1.4.0 起结构上是唯一可能）**：状态住在
+> `_PUBLISHED` **dict 里就地改**，唯一写入点；`UPDATE_READY` / `PENDING_CMD` 是
+> `__getattr__` 的**只读派生值**，模块里**没有可被 `global` 重绑的标量**。
+> 为什么较真到这个程度：旧版把状态写成模块级标量、函数里 `global` 重绑，而包门面
+> `from .update_helper import *` 会拷走一份**静态副本** → 外部永远读到导入时的 `None`：
+> 替换脚本永不拉起（更新装了等于没装）、"下载并更新"永久灰着，**且无任何报错**。
+> 现在即便有人把 `import *` 加回来也复现不了——`import *` 不搬运 `__getattr__` 的派生名，
+> 只会明确报"没有该属性"。
+> 回归：`python my-diy-tool-template/sync_check.py --selftest`（E 组，含反向自证）
+> 与 `conformance_check.py --selftest`（C-21 / C-23 正反样本）。
 
 目标目录 `target_dir` 二选一：有稳定安装位的工具传 `INSTALL_DIR`（local-speak2text
 形态）；没有的传运行中 exe 所在目录（dsh/opencodex 形态）。`update_dir` 必须在目标目录
 **之外**（备份/快照/marker 都落在它旁边）。
 
-## 替换脚本的语义要点（1.3.0，缺一即回归）
+## 替换脚本的语义要点（1.3.0/1.4.0，缺一即回归）
 
 回归资产：`python my-diy-tool-template/sync_check.py --selftest`（E 组，含反向样本）。
 
@@ -54,6 +59,12 @@
    读出来告诉用户；本次失败绝不留成"无声消失"。
 6. 收尾分两条：成功/放弃删暂存（每次约 50MB）；失败路径**保留**暂存与快照供人工恢复。
    脚本本体在 %TEMP%，不在暂存目录内，故删暂存不会锁住正在执行的它；末尾自删。
+7. **空暂存包在动手之前就拦下**（1.4.0）：暂存目录里没有 exe 时**绝不**开始拷贝——
+   `robocopy /e /purge` 从空源返回 0–7，会把**安装目录清空**；随后的
+   `start ""` 指向不存在的 exe 会弹出**没人能关的模态错误框**，bat 卡死。
+   拦截后不碰安装目录、写 marker、把旧版本拉回来。
+8. **每处 `start` 之前都有存在性守卫**（1.4.0）：回铺后 exe 仍不在 ⇒ 不启动（进 `:install_dead`）。
+   启动一个不存在的 exe 是这套脚本里唯一会"卡死到永远"的动作。
 
 ## 打包约定（release.yml 必须满足）
 

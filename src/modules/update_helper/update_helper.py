@@ -1,9 +1,24 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/update_helper/update_helper.py | TEMPLATE-VER: 1.3.0
+# TEMPLATE-FROM: my-diy-tool-template/modules/update_helper/update_helper.py | TEMPLATE-VER: 1.4.0
 """T4｜在线更新三段式：查（GitHub Releases）→ 下（zip + sha256）→ 换（退出后铺目录并重启）。
 
 **基准**：本件按用户仲裁规则（STANDARDS B4）以 reme-helper 的**已验证更新链**为准
-（`reme-helper/src/main.py` 7098-7345），不以"用的人多"为准。
+（`reme-helper/src/main.py` 7098-7345；语义清单见 `reme-helper/UPDATE-CHAIN-REFERENCE.md`），
+不以"用的人多"为准。
+
+1.4.0（2026-09-19）：照该基准清单 §9 第 1、2 条，把两件事做成**结构上不可能再犯**——
+而不是继续靠约定挡着：
+
+  * **状态改为"可变容器就地改 + 只读派生"**（STANDARDS §D6）。1.3.0 仍是
+    `UPDATE_READY = None` 这类**模块级标量 + 函数内 `global` 重绑**——正是两次静默失效
+    （`i18n.LANG`、`PENDING_CMD`）的形态；1.3.0 只是靠"包门面改用 `__getattr__` 委派"
+    挡着，谁把 `import *` 加回来就又中招。现在：**唯一写入点**是 `_PUBLISHED` dict 的
+    就地赋值，模块级**不存在**可被重绑的标量；`UPDATE_READY` / `PENDING_CMD` 由
+    **PEP 562 `__getattr__` 派生**（读得到、永远是活值、无法被重新绑定）。
+  * **新增 `launch_pending_cmd()`**：以 `CREATE_NO_WINDOW | DETACHED_PROCESS` 拉起替换脚本
+    （reme 形态，`main.py:7258-7260`）。此前"怎么拉起"留给消费方，工具就各写一遍
+    `os.system('start "" /min ...')`——**bat 必须在主进程退出后继续跑**，且不该在用户桌面
+    闪控制台；这段语义属于本模块。
 
 1.3.0（2026-09-19）：补上 1.2.0 漏掉的**回退与失败可见性**三件——1.2.0 只搬了"等待/上限/
 备份/清扫"，仍缺替换失败后的活路：
@@ -40,6 +55,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import time
 import urllib.error
@@ -50,9 +66,8 @@ from pathlib import Path
 from modules.appconfig import APP_ID, EXE_NAME, REPO_NAME, REPO_OWNER
 
 REPO = f"{REPO_OWNER}/{REPO_NAME}"
+# 检查节流窗口（进程内：见 check_update 的说明——跨进程不生效，别把它当持久化配额保护）
 CHECK_INTERVAL = 24 * 3600
-UPDATE_READY = None   # 有新版时的版本号；None=无（控制「下载并更新」菜单可用性）
-PENDING_CMD = None    # 已就绪的一次性安装脚本路径；None=无（控制退出时是否拉起）
 
 # 等旧进程退出的上限：120 次 × 约 1 秒（`ping -n 2` 的节奏）——reme 实测值
 UPDATE_WAIT_LIMIT = 120
@@ -61,7 +76,35 @@ TEMP_PREFIX = f"{APP_ID}-update-"
 # 更新器失败时留的 marker 文件名（落在 update_dir 的父目录，即用户数据区）
 FAILED_MARKER_NAME = "update.failed"
 
+# 「查」的节流状态（就地改，见 check_update）
 _STATE = {"checked_for": "", "latest": "", "at": 0.0}
+# 「对外可见状态」的唯一写入点（STANDARDS §D6）。
+# 刻意**不做**模块级标量：标量一旦被函数内 `global` 重绑，外部经包命名空间读到的就是死副本
+# （i18n.LANG / PENDING_CMD 两次静默失效）。这里只就地改 dict，读取一律走访问器或下面的
+# __getattr__ 派生——结构上不存在"可被重绑的标量"，旧缺陷无法复现。
+_PUBLISHED = {
+    "ready": None,        # 有新版时的版本号；None=无（控制「下载并更新」菜单可用性）
+    "pending_cmd": None,  # 已就绪的一次性替换脚本路径；None=无（控制退出时是否拉起）
+}
+
+
+def __getattr__(name):
+    """PEP 562：`UPDATE_READY` / `PENDING_CMD` 由此**派生**，模块里没有这两个全局。
+
+    关键性质：**`from .update_helper import *` 不会搬运它们**（`import *` 只搬运 `__dict__`
+    里的名字，`__getattr__` 的派生名不在其中）——于是"包门面 import * 拷出死副本"这条路径
+    在结构上被切断：拿不到旧值，只会明确报"没有该属性"。
+
+    保留这两个名字只为兼容旧读法（README 曾承诺）。⚠️ 诚实边界：模块属性**仍可被显式赋值**
+    遮蔽（`update_helper.UPDATE_READY = x` 不会报错——PEP 562 只管查找，不管赋值），
+    那是**蓄意的重新绑定**，不是本缺陷要防的静默拷贝；真值仍只有一个写入点 `_PUBLISHED`。
+    新代码请用 `update_ready()` / `pending_cmd()`。
+    """
+    if name == "UPDATE_READY":
+        return _PUBLISHED["ready"]
+    if name == "PENDING_CMD":
+        return _PUBLISHED["pending_cmd"]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # 替换脚本模板。**ASCII-only**（cmd.exe 按机器 ANSI 代码页解析；解释一律留在 Python 侧）。
 # 刻意**不用括号块**：cmd 对块内 errorlevel 的解析不可靠，全程 goto（reme 实测结论）。
@@ -92,6 +135,12 @@ if %tries% geq {limit} goto giveup
 ping -n 2 127.0.0.1 >nul
 goto wait
 :gone
+rem Guard the staged package BEFORE touching the install dir. An empty/exe-less STAGE can
+rem come from a swept %TEMP% (sweep_stale_update_dirs only clears >1h old dirs, but a reboot
+rem or a manual cleanup can still take it): robocopy would then return 0-7 with /purge and
+rem WIPE the install dir, and the "start" below would pop a modal error box for a missing
+rem exe - a dialog nobody can dismiss, so the bat hangs forever holding the lock.
+if not exist "%STAGE%\{exe}" goto stage_invalid
 rem Snapshot the CURRENT install first. The previous BACKUP is NOT deleted here: it is the
 rem rollback source and is only rotated AFTER a copy that succeeded.
 if exist "%SNAPSHOT%" rmdir /s /q "%SNAPSHOT%"
@@ -102,10 +151,18 @@ robocopy "%STAGE%" "%TARGET%" /e /purge /njh /njs /nfl /ndl >> "%LOG%" 2>&1
 set "RC=%ERRORLEVEL%"
 echo [{stamp}] copied rc=%RC% >> "%LOG%"
 if %RC% geq 8 goto install_failed
+if not exist "{newexe}" goto install_failed
 if exist "%BACKUP%" rmdir /s /q "%BACKUP%"
 move /y "%SNAPSHOT%" "%BACKUP%" >nul 2>nul
 start "" "{newexe}"
 echo [{stamp}] done >> "%LOG%"
+goto cleanup
+:stage_invalid
+rem Nothing was touched yet: bring the CURRENT version back and say why. Starting a
+rem non-existent exe is the one thing that must never happen (modal box -> hang).
+> "%FAILED%" echo update failed {stamp}: staged package has no {exe}
+echo [{stamp}] STAGE INVALID - no {exe} in stage; install untouched >> "%LOG%"
+if exist "{newexe}" start "" "{newexe}"
 goto cleanup
 :install_failed
 rem robocopy: 0-7 = success, >=8 = failure. On failure NEVER start the new exe; restore the
@@ -152,16 +209,35 @@ def _version_is_newer(latest, current):
 
 
 def update_ready():
-    """有新版时的版本号，否则 None（**推荐读法**）。
-
-    状态经访问器暴露，外部不要直接读可变全局——包门面若 `import *`，那份是静态副本。
-    """
-    return UPDATE_READY
+    """有新版时的版本号，否则 None（**推荐读法**）。"""
+    return _PUBLISHED["ready"]
 
 
 def pending_cmd():
     """已就绪的一次性安装脚本路径，否则 None（**推荐读法**）。"""
-    return PENDING_CMD
+    return _PUBLISHED["pending_cmd"]
+
+
+def launch_pending_cmd(cmd=None, log=lambda *a: None):
+    """在退出收尾处拉起替换脚本，返回是否已拉起。
+
+    必须**无控制台且脱离父进程**（`CREATE_NO_WINDOW | DETACHED_PROCESS`，reme 形态
+    `main.py:7258-7260`）：本进程马上就要退出，bat 要活到替换完成；而它若挂着一个控制台，
+    用户桌面会闪黑框。这段语义属于本模块——不要让每个工具各写一遍 `os.system('start ...')`。
+
+    调用方看着 True 再退（同 reme 的"交出更新后必退"）。
+    """
+    cmd = cmd or _PUBLISHED["pending_cmd"]
+    if not cmd or os.name != "nt":
+        return False
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
+    try:
+        subprocess.Popen(["cmd.exe", "/c", str(cmd)], creationflags=flags, close_fds=True)
+    except OSError as exc:
+        log("launch pending failed:", exc)
+        return False
+    log("pending update launched:", str(cmd))
+    return True
 
 
 def http_error_hint(exc):
@@ -183,9 +259,8 @@ def _publish(latest, current_version):
     只在**成功取到 latest** 时调用：网络失败不误清已发现的新版。
     无新版（或 latest 为空）时置回 None——"下载并更新"据此保持灰态。
     """
-    global UPDATE_READY
     newer = bool(latest) and _version_is_newer(latest, current_version)
-    UPDATE_READY = latest if newer else None
+    _PUBLISHED["ready"] = latest if newer else None
     return newer
 
 
@@ -307,7 +382,6 @@ def download_and_prepare(latest, target_dir, update_dir, log=lambda *a: None,
     同级 `_backup` / `_backup.pre`，必须在 target **之外**——见脚本内注释）。zip 打包约定
     （release.yml）：压缩包里带一层 <APP_ID>-<版本>/ 目录。
     """
-    global PENDING_CMD
     update_dir = Path(update_dir)
     base = f"https://github.com/{REPO}/releases/download/v{latest}"
     stem = f"{APP_ID}-{latest}-windows-x64"
@@ -346,7 +420,7 @@ def download_and_prepare(latest, target_dir, update_dir, log=lambda *a: None,
         script.write_text(text, encoding="mbcs", errors="replace")
     except (LookupError, UnicodeError):
         script.write_text(text, encoding="utf-8")
-    PENDING_CMD = str(script)
+    _PUBLISHED["pending_cmd"] = str(script)
     log("update staged:", str(staged), "->", str(target_dir), "(bat %s)" % script)
     return str(script)
 

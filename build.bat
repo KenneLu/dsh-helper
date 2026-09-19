@@ -207,12 +207,21 @@ if not exist "%RELEASE_DIR%\config.json" (
 set "PYTHONUTF8=1"
 if defined NOSMOKE goto :smoke_done
 rem Instance isolation (F11/D12): the smoke run must not read or rewrite the
-rem developer's live AppData config/log - redirect the whole data root into
-rem the release dir, which is cleaned up right after the smoke.
+rem developer's live AppData config/log - DUAL PIN (both env vars) so the config
+rem file is pinned too, not just the data root. Both land in a throwaway dir
+rem inside the release folder, cleaned up right after the smoke.
 set "DSH_HELPER_DATA_DIR=%RELEASE_DIR%\smoke-data"
+rem The smoke needs the factory config (it carries dsh_cmd), but must not rewrite
+rem the shipped copy: pin it to a throwaway COPY inside smoke-data.
+if not exist "%RELEASE_DIR%\smoke-data" mkdir "%RELEASE_DIR%\smoke-data"
+copy /y "%RELEASE_DIR%\config.json" "%RELEASE_DIR%\smoke-data\config.json" >nul
+set "DSH_HELPER_CONFIG=%RELEASE_DIR%\smoke-data\config.json"
 echo [TEST] frozen smoke ...
 "%FROZEN_EXE%" --smoke
-if errorlevel 1 (
+set "SMOKE_RC=%errorlevel%"
+set "DSH_HELPER_DATA_DIR="
+set "DSH_HELPER_CONFIG="
+if not "%SMOKE_RC%"=="0" (
   echo [ERROR] smoke test failed. See %RELEASE_DIR%\smoke-data\log
   if not defined NOPAUSE pause
   exit /b 1

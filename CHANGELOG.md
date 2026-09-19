@@ -20,12 +20,22 @@ this batch was rolled back to 1.8.1.
   keying off return values instead makes this tool independent of that state
   (verified: `grep update_helper.(PENDING_CMD|UPDATE_READY)` is empty).
   Also resynced `modules/update_helper` to template 1.3.0.
-- Tests (D1 1.5): added `tests/` with `test_update_chain.py`, pinning the update
-  chain with stubs - a stub `check_update()` lights the cached version, a stub
-  `download_and_prepare()` return value is stored, and a stubbed `os.system`
-  proves the quit path launches that exact script. It pins its own
-  `DSH_HELPER_DATA_DIR`, takes no mutex and writes no registry; wired into
-  build.bat as a gate step.
+- Tests (D1 1.4/1.5): added `tests/` with four suites, all isolated (each pins
+  its own `DSH_HELPER_DATA_DIR` before importing main; no mutex, no registry,
+  no network) and wired into build.bat as a gate:
+  - `test_single_instance.py` - mutex name matches the family derivation, the
+    kernel accepts it, the old illegal name still fails, acquire/refuse uses a
+    test-only name (SINGLE-08), and the guard fails open.
+  - `test_startup_path.py` - runs the real `main()` with heavy stubs and asserts
+    the startup sequence is reached (log `startup`, `migrate_autostart`, command
+    detection).
+  - `test_i18n_menu.py` - switching language reads via the package namespace and
+    really rebuilds the menu into English (the 2.1.1 regression).
+  - `test_update_chain.py` - stubbed update chain: the discovered version is
+    cached, the returned apply-script path is stored, and quit launches it.
+- Frozen smoke now **dual-pins** `DSH_HELPER_DATA_DIR` + `DSH_HELPER_CONFIG`
+  (the config is a throwaway copy inside smoke-data, so the shipped config is
+  never rewritten) - D1 unified convention.
 - i18n / T1 (bilingual UI): adopted the template `modules/i18n` 2.1.1
   (light form) - `locales/zh.json` (base) + `locales/en.json`, flat KV,
   en falls back to zh. Every tray menu label, notification, dialog, status
