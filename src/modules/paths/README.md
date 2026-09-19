@@ -15,7 +15,7 @@
 |---|---|
 | `APP_DIR` / `RUN_DIR` | 打包后 = exe 所在目录；开发态 = 仓库根 |
 | `USER_DATA_DIR` | `%LOCALAPPDATA%\<APP_ID>\`；**整体可被 `<APP_ID 大写>_DATA_DIR` env 重定向**（F11：测试/工具链实例必须重定向，严禁与常驻实例共享任何落盘文件） |
-| `CONFIG_PATH` | 默认 `USER_DATA_DIR/config.json`；**可被 `<APP_ID 派生>_CONFIG` env 显式钉死**（1.1.3 补实现，兑现本文档早先承诺，见 CONFORMANCE §4.1.5）。派生式 = `APP_ID.upper().replace('-','_') + '_CONFIG'`（NAME-10）；`local-speak2text` 的历史变量名 `LOCALSPEAK2TEXT_*`（无下划线）是已知唯一例外 |
+| `CONFIG_PATH` | 默认 `USER_DATA_DIR/config.json`；**可被 `<APP_ID 派生式>_CONFIG` 钉死**（1.1.3 补实现，兑现本文档早先承诺，见 CONFORMANCE §4.1.5）。派生式 = `APP_ID.upper().replace('-','_') + '_CONFIG'`（NAME-10），四工具统一按此命名 |
 | `LEGACY_CONFIG_PATH` | exe 旁旧位置，仅 `seed_config()` 首次迁移读一次 |
 | `LOG_DIR` / `LOG_PATH` | `USER_DATA_DIR/log/`，T12 log_kit 消费 |
 | `UPDATE_DIR` | T4 update_helper 的下载/暂存区 |
