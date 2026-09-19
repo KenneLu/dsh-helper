@@ -15,7 +15,7 @@
 |---|---|
 | `APP_DIR` / `RUN_DIR` | 打包后 = exe 所在目录；开发态 = 仓库根 |
 | `USER_DATA_DIR` | `%LOCALAPPDATA%\<APP_ID>\`；**整体可被 `<APP_ID 大写>_DATA_DIR` env 重定向**（F11：测试/工具链实例必须重定向，严禁与常驻实例共享任何落盘文件） |
-| `CONFIG_PATH` | `USER_DATA_DIR/config.json`；`<APP>_CONFIG` env 可显式钉死（打包自检/测试用） |
+| `CONFIG_PATH` | 默认 `USER_DATA_DIR/config.json`；**可被 `<APP_ID 派生>_CONFIG` env 显式钉死**（1.1.3 补实现，兑现本文档早先承诺，见 CONFORMANCE §4.1.5）。派生式 = `APP_ID.upper().replace('-','_') + '_CONFIG'`（NAME-10）；`local-speak2text` 的历史变量名 `LOCALSPEAK2TEXT_*`（无下划线）是已知唯一例外 |
 | `LEGACY_CONFIG_PATH` | exe 旁旧位置，仅 `seed_config()` 首次迁移读一次 |
 | `LOG_DIR` / `LOG_PATH` | `USER_DATA_DIR/log/`，T12 log_kit 消费 |
 | `UPDATE_DIR` | T4 update_helper 的下载/暂存区 |
@@ -28,7 +28,8 @@
 
 1. 拷 `paths.py`，确认 `appconfig.py` 在位（唯一 import）；
 2. `main()` 最先调用 `seed_config()`，之后所有模块从这里拿路径；
-3. 测试/CI 里设 `<APP>_DATA_DIR` 指向临时目录（实例隔离，F11/D12）。
+3. 测试/CI 里设 `<APP>_DATA_DIR` 指向临时目录（实例隔离，F11/D12）；
+   需要连配置文件位置也钉死时再设 `<APP>_CONFIG`（1.1.3+）。
 
 ## 边界与坑
 
