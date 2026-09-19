@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/tray_kit/tray_kit.py | TEMPLATE-VER: 2.2.0
+# TEMPLATE-FROM: my-diy-tool-template/modules/tray_kit/tray_kit.py | TEMPLATE-VER: 2.2.1
 """T7｜托盘机制件：单实例互斥体、退出请求文件 + 监视循环、面板地址行掩码、菜单签名重画、退出确认框（2.0.0）。
 
 2.2.0：**合法性判据单一化**——新增 `mutex_name_ok(name)`（纯字符串判定：非空字符串、
@@ -158,8 +158,12 @@ def confirm_quit_dialog(app_name, checkbox_text=None, checked_init=False,
     2.0.2（E4-02）：本函数是纯机制件，**不得硬编码用户可见文案**——启用 i18n 的工具
     经 title/body_text/confirm_text/cancel_text 传入 t() 词条；不传则用中文默认值，
     老调用点行为不变。checkbox_text 为空/None 时不再渲染空勾选框（l-s2t 形态）。
-    返回 {"go": bool, "stop_service": bool}；取消返回 None。富对话框失败由调用方走
-    降级链（原生 askyesno → 放行且默认不清理），本函数不吞异常。
+    返回 {"go": bool, "stop_service": bool}；**取消 = {"go": False, ...}，永不返回 None**
+    （2.2.1：旧 docstring 写"取消返回 None"，与实现不符——`result` 在函数开头就建成非空
+    dict，之后只有 `.update(...)`，因此每条路径上它都为真，`or None` 不可达。消费方若有
+    `if choice is None:` 分支（那是 fail-open 落点），**不要因为这句话把返回值改成 None**：
+    契约是"永不 None"，取消由 `go=False` 表达）。
+    富对话框失败由调用方走降级链（原生 askyesno → 放行且默认不清理），本函数不吞异常。
     """
     import tkinter as tk
 
@@ -217,7 +221,9 @@ def confirm_quit_dialog(app_name, checkbox_text=None, checked_init=False,
     win.wait_window()
     if _temp_root is not None:
         _temp_root.destroy()
-    return result or None
+    # 2.2.1：`result` 在此恒为非空 dict（开头建、之后只 `.update`），`or None` 不可达，
+    # 删掉它是**行为不变**的（helpers-dev 当场逐路径证过）。契约见 docstring：永不 None。
+    return result
 
 
 def warn_duplicate_instance(app_name, hint="请看任务栏右下角通知区域里的图标。",

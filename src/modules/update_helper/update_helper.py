@@ -1,18 +1,28 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/update_helper/update_helper.py | TEMPLATE-VER: 1.4.3
+# TEMPLATE-FROM: my-diy-tool-template/modules/update_helper/update_helper.py | TEMPLATE-VER: 1.4.4
 """T4｜在线更新三段式：查（GitHub Releases）→ 下（zip + sha256）→ 换（退出后铺目录并重启）。
 
 **基准**：本件按用户仲裁规则（STANDARDS B4）以 reme-helper 的**已验证更新链**为准
 （`reme-helper/src/main.py` 7098-7345；语义清单见 `reme-helper/UPDATE-CHAIN-REFERENCE.md`），
 不以"用的人多"为准。
 
+1.4.4（2026-09-19）：**一处同源修复**——`budget_s` 必须由**调用方那个 `limit`** 派生，
+不许传模块常量。旧写法传 `UPDATE_WAIT_BUDGET_S`（按 `UPDATE_WAIT_LIMIT=120` 算），于是
+调用方传 `limit=2` 时渲染出 `2 polls x 1000ms (nominal budget 120s)`——分母与数量级
+自相矛盾，而且它只出现在**日志**里，不会让任何门禁变红。现为
+`budget_s=limit * UPDATE_WAIT_TICK_MS // 1000`。`UPDATE_WAIT_BUDGET_S` 保留为
+"默认 limit 下的名义预算"，**不再被渲染器使用**。
+（本条可机械判据化：渲染 `limit=2` 必须出现 `budget 2s`。判据落点在 `sync_check --selftest`
+的 update_helper 组，不在本文件。）
+
 1.4.3（2026-09-19）：**两处修复**（都可机械判据化，见 conformance_check C-32/C-33）：
 
-  * **等待节拍不再用 `ping`**：`ping -n 2 127.0.0.1` 看着像"睡 1 秒"，在**丢弃 loopback ICMP**
-    的机器上实测 **9.0s/拍**（两次 4.5s 超时）——名义 120s 的等待变成 ~18 分钟，而 `:giveup`
-    还打印 `after 120s`（**日志说谎**）。改成 `powershell -NoProfile -Command "Start-Sleep
-    -Milliseconds {tick_ms}"`（ICMP-free；DETACHED 进程无 console，子进程不弹窗），常量拆成
-    `UPDATE_WAIT_LIMIT`（**轮询次数**）× `UPDATE_WAIT_TICK_MS`（每拍毫秒），超时行报告
+  * **等待节拍不再用 `ping`**（那是"发 ICMP 等回包"，不是睡眠）：`-n 2` + loopback 地址
+    看起来像"睡 1 秒"，在**丢弃 loopback ICMP** 的机器上实测 **9.0s/拍**（两次 4.5s 超时）
+    ——名义 120s 的等待变成 ~18 分钟，而 `:giveup` 还打印 `after 120s`（**日志说谎**）。
+    改成 `powershell -NoProfile -Command "Start-Sleep -Milliseconds {tick_ms}"`（ICMP-free；
+    DETACHED 进程无 console，子进程不弹窗），常量拆成 `UPDATE_WAIT_LIMIT`（**轮询次数**）×
+    `UPDATE_WAIT_TICK_MS`（每拍毫秒），超时行报告
     `%tries% polls x {tick_ms}ms (...) lower bound`——**不再打印没人量过的"秒"**。
   * **`pop_failed_update_note` 改成"先报告、最后删证据"**（C-32）：旧顺序在 `unlink` 抛
     OSError 时走 except 直接 `return ""`，detail 明明读到了用户却看不到提示；调用边界上的
@@ -101,9 +111,18 @@ CHECK_INTERVAL = 24 * 3600
 # 禁止 ping 当节拍已升级为机械判据 C-33。
 UPDATE_WAIT_LIMIT = 120
 UPDATE_WAIT_TICK_MS = 1000
+# 默认 limit 下的名义预算。**渲染器不得直接用它**（1.4.4 修复）：调用方可以传别的 limit，
+# 用了这个常量就会渲染出"2 polls x 1000ms (nominal budget 120s)"这种不可能的日志。
+# 渲染侧一律 `limit * UPDATE_WAIT_TICK_MS // 1000`，与 limit 同源。
 UPDATE_WAIT_BUDGET_S = UPDATE_WAIT_LIMIT * UPDATE_WAIT_TICK_MS // 1000
-# %TEMP% 下暂存目录/脚本的识别前缀
-TEMP_PREFIX = f"{APP_ID}-update-"
+# %TEMP% 下本应用自己的名字：**前缀到 `-update` 为止**（**不带**尾随分隔符），因为两类
+# 产物都以它开头：
+#   * 暂存目录 `<APP_ID>-update-<随机>`（mkdtemp 产生）
+#   * 替换脚本 `<APP_ID>-update.bat`（固定名）
+# ⚠️ 2026-09-19 缺陷（helpers-dev 找到）：旧值 `f"{APP_ID}-update-"` 带尾随 `-`，
+# `glob` **永远匹配不到** `…-update.bat`；而清扫又只处理 `is_dir()` ⇒ **中断的更新会永久
+# 留下一个 `*-update.bat`**，清扫器永远看不见（每中断一次多一个，且**无声**）。
+TEMP_PREFIX = f"{APP_ID}-update"
 # 更新器失败时留的 marker 文件名（落在 update_dir 的父目录，即用户数据区）
 FAILED_MARKER_NAME = "update.failed"
 
@@ -396,7 +415,11 @@ def build_apply_script(target_dir, stage_dir, work_dir, backup_dir, log_path,
         target=target_dir, stage=stage_dir, work=work_dir, backup=backup_dir,
         snapshot=snapshot_dir, failed=failed_marker, log=log_path,
         exe=EXE_NAME, newexe=os.path.join(str(target_dir), EXE_NAME),
-        limit=limit, tick_ms=UPDATE_WAIT_TICK_MS, budget_s=UPDATE_WAIT_BUDGET_S,
+        limit=limit, tick_ms=UPDATE_WAIT_TICK_MS,
+        # 1.4.4：budget **必须与 limit 同源**。旧写法传模块常量 `UPDATE_WAIT_BUDGET_S`
+        # （按 UPDATE_WAIT_LIMIT=120 算），调用方传 `limit=2` 时会渲染出
+        # "2 polls x 1000ms (nominal budget 120s)"——一句不可能的话。
+        budget_s=limit * UPDATE_WAIT_TICK_MS // 1000,
         stamp=time.strftime("%Y-%m-%d %H:%M:%S"),
     )
 
@@ -488,21 +511,30 @@ def download_and_prepare(latest, target_dir, update_dir, log=lambda *a: None,
 
 
 def sweep_stale_update_dirs(max_age=3600.0):
-    """清掉更新器遗留在 %TEMP% 的暂存目录，返回清掉的个数。
+    """清掉更新器遗留在 %TEMP% 的**暂存目录**与**替换脚本**，返回清掉的个数。
 
     正常路径由脚本收尾；但它可能被打断（重启/被杀/半路消失），那之后就
     没有任何东西知道那份**解压好的整包**在哪了（reme 实测每次约 50MB，四轮积 201MB）。
-    只动本应用自己命名的那一类（`<APP_ID>-update-*`），且只动 **max_age 之前**的：
-    正在进行的更新，其暂存目录是刚建的，绝不能碰。清扫失败不抛（不该拦住启动）。
+    只动本应用自己命名的那一类（`<APP_ID>-update*`），且只动 **max_age 之前**的：
+    正在进行的更新，其产物是刚建的，绝不能碰。清扫失败不抛（不该拦住启动）。
+
+    ⚠️ **两类都要清**（2026-09-19 缺陷，helpers-dev 找到）：暂存是**目录**，替换脚本是
+    **文件**（`<APP_ID>-update.bat`）。旧实现同时错了两处——前缀带尾随 `-`（匹配不到
+    `…-update.bat`）+ 只处理 `is_dir()`——于是**中断的更新会永久留下脚本文件**，
+    而这个函数正是唯一应该清掉它的地方。
     """
     removed = 0
     try:
         cutoff = time.time() - max_age
         for path in Path(tempfile.gettempdir()).glob(TEMP_PREFIX + "*"):
             try:
-                if path.is_dir() and path.stat().st_mtime < cutoff:
+                if path.stat().st_mtime >= cutoff:
+                    continue
+                if path.is_dir():
                     shutil.rmtree(path, ignore_errors=True)
-                    removed += 1
+                else:
+                    path.unlink()
+                removed += 1
             except OSError:
                 continue
     except Exception:
