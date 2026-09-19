@@ -23,7 +23,7 @@ The tagging convention matches the versions in this file.
   key exists in **both** tables, with three self-checks (non-empty scan surface / a known-bad key is
   caught / a known-good key is not), because `t()` returns the **key name itself** for a missing key
   and the build's i18n gate only covers 9 core keys - so a forgotten key ships as visible key text
-  with every gate green. `build.bat` picks the suite up automatically (`for %%t in (tests	est_*.py)`).
+  with every gate green. `build.bat` picks the suite up automatically (`for %%t in (tests\test_*.py)`).
 - **Module-copy hygiene in the same batch: six `__init__.py` carried the template's own header form**
   (raw byte copies, including the template's `# TEMPLATE-MODULE:` line and its stale-looking
   `TEMPLATE-VER`), so the provenance link back to the template path was missing - and C-19 accepts
