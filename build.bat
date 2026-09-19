@@ -110,6 +110,18 @@ if not "%AUDIT_RC%"=="0" (
   exit /b 1
 )
 
+rem tests/ suite (D1 1.5): update-chain regression, fully stubbed. Each test pins
+rem its own <APP>_DATA_DIR before importing main, and takes no mutex / writes no registry.
+echo [TEST] tests suite ...
+for %%t in (tests\test_*.py) do (
+  "%PY%" "%%t"
+  if errorlevel 1 (
+    echo [ERROR] test failed: %%t
+    if not defined NOPAUSE pause
+    exit /b 1
+  )
+)
+
 rem sync_check gate: the template repo only exists on dev machines (CI checks
 rem out a single repo) - skipped there like nosmoke, local builds keep it ON.
 if not exist "..\my-diy-tool-template\sync_check.py" goto :sync_skip

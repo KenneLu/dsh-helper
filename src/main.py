@@ -1389,8 +1389,8 @@ PENDING_UPDATE_CMD = None
 
 
 def check_update_menu(_icon=None, _item=None):
-    global LATEST_VERSION
     def worker():
+        global LATEST_VERSION
         result = update_helper.check_update(VERSION, force=True)
         if result.get("newer"):
             LATEST_VERSION = result["latest"]

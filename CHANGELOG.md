@@ -19,7 +19,13 @@ this batch was rolled back to 1.8.1.
   never launched) and `UPDATE_READY` was never assigned (item grey forever);
   keying off return values instead makes this tool independent of that state
   (verified: `grep update_helper.(PENDING_CMD|UPDATE_READY)` is empty).
-  Also resynced `modules/update_helper` to template 1.2.0.
+  Also resynced `modules/update_helper` to template 1.3.0.
+- Tests (D1 1.5): added `tests/` with `test_update_chain.py`, pinning the update
+  chain with stubs - a stub `check_update()` lights the cached version, a stub
+  `download_and_prepare()` return value is stored, and a stubbed `os.system`
+  proves the quit path launches that exact script. It pins its own
+  `DSH_HELPER_DATA_DIR`, takes no mutex and writes no registry; wired into
+  build.bat as a gate step.
 - i18n / T1 (bilingual UI): adopted the template `modules/i18n` 2.1.1
   (light form) - `locales/zh.json` (base) + `locales/en.json`, flat KV,
   en falls back to zh. Every tray menu label, notification, dialog, status

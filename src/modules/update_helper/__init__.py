@@ -1,4 +1,4 @@
-# TEMPLATE-MODULE: update_helper | TEMPLATE-VER: 1.2.0
+# TEMPLATE-MODULE: update_helper | TEMPLATE-VER: 1.3.0
 """update_helper 包门面：**不复制状态**（1.1.0 起）。
 
 `from .update_helper import *` 会把 `UPDATE_READY` / `PENDING_CMD` 拷成**静态副本**：
@@ -20,15 +20,19 @@ from .update_helper import (  # 函数按引用绑定：调用时读子模块全
     build_apply_script,
     check_update,
     download_and_prepare,
+    failed_marker_path,
     http_error_hint,
     pending_cmd,
+    pop_failed_update_note,
     sweep_stale_update_dirs,
     update_ready,
+    verify_zip_sha256,
 )
 
 __all__ = [
     "update_helper", "build_apply_script", "check_update", "download_and_prepare",
-    "http_error_hint", "pending_cmd", "sweep_stale_update_dirs", "update_ready",
+    "failed_marker_path", "http_error_hint", "pending_cmd", "pop_failed_update_note",
+    "sweep_stale_update_dirs", "update_ready", "verify_zip_sha256",
 ]
 
 
