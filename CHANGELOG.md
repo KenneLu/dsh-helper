@@ -31,7 +31,6 @@ The tagging convention matches the versions in this file.
   line only, each copy keeping **its own file's** version (not the sibling module's).
   `update_helper.py` was re-copied from the template byte-exactly as well (the 1.4.4 change was
   docstring prose only, zero code).
-
 - **Quit no longer fails closed when the dialog chain is unavailable** (2026-09-19 defect: the
   tool could not be exited at all, only killed from Task Manager). `tkinter.Tk()` raising
   `TclError` - a hollowed `_internal/`, i.e. no usable `init.tcl` - made both the rich dialog and
