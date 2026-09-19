@@ -116,9 +116,14 @@ M.autostart.migrate_autostart = lambda **k: CALLS.__setitem__("autostart", CALLS
 M.run_auto_detect_dsh_command = lambda startup=False: CALLS.__setitem__("detect", CALLS["detect"] + 1)
 M.update_helper.check_update = lambda version, force=False: {"newer": False, "latest": "", "current": version}
 # T4 接线：清 TEMP 残包 + 取上次失败 marker。返回中文串（模板件），工具只用它的真值。
-M.update_helper.sweep_stale_update_dirs = lambda *a, **k: ORDER.append("sweep") or 3
+# 替身签名**照抄生产实现**（J 坑：替身比生产宽容 = 制造假绿）。生产是
+# `sweep_stale_update_dirs(max_age=3600.0)` 与 `pop_failed_update_note(update_dir, log=...)`；
+# 写成 `lambda *a, **k` 会连"传错参数"一起收下，等于把契约错误盖住。宁严勿宽。
+M.update_helper.sweep_stale_update_dirs = (
+    lambda max_age=3600.0: ORDER.append("sweep") or 3)
 _REAL_POP = M.update_helper.pop_failed_update_note     # 留给下面的真 marker 端到端用例
-M.update_helper.pop_failed_update_note = lambda *a, **k: ORDER.append("note") or "上次自动更新失败"
+M.update_helper.pop_failed_update_note = (
+    lambda update_dir, log=lambda *a: None: ORDER.append("note") or "上次自动更新失败")
 M.notify = lambda msg: NOTIFIES.append(msg)
 
 rc = M.main()

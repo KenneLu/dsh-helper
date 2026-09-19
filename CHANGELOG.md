@@ -67,6 +67,13 @@ The tagging convention matches the versions in this file.
   resolves `ocx.cmd` but never runs a capability probe (`run_ocx` calls `start`/`stop`/
   `restart` with 90/60/180 s); `local-speak2text` and `reme-helper` have no Node CLI at all -
   their timeouts are on HTTP or long-running service ops, a different class.
+- **Test stand-ins now copy the production signature exactly** (lead ruling J-坑: a
+  stand-in more permissive than the real thing manufactures a false green). Two stubs in
+  `test_startup_path.py` were written `lambda *a, **k: ...` while the templates declare
+  `sweep_stale_update_dirs(max_age=3600.0)` and `pop_failed_update_note(update_dir,
+  log=...)` - so a call with the *wrong* arguments would have been silently accepted, the
+  exact shape that hid the whole `log` contract conflict. They now spell the real
+  parameters out; strictness may cost a false red, which is safe.
 
 Version number is intentionally NOT bumped: as of 2026-09-19 the owner ruled
 that dev work lands as local commits only and the version changes only when a
