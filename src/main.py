@@ -1295,9 +1295,9 @@ def quit_menu(icon, _item):
     icon.stop()
     if pids:
         log("quit: managed dsh stopped")
-    if update_helper.pending_cmd():
+    if PENDING_UPDATE_CMD:
         # 本进程退出后由脚本接管：等待 → robocopy 铺新版 → 重启新 exe → 自删
-        os.system('start "" /min "%s"' % update_helper.pending_cmd())
+        os.system('start "" /min "%s"' % PENDING_UPDATE_CMD)
 
 
 def monitor_loop():
@@ -1380,27 +1380,41 @@ def make_icon_image(running):
     return gray
 
 
+# 更新状态由**工具自持**，不读模板模块的可变全局：模板包曾用 `from .x import *`
+# 把 PENDING_CMD 拷成静态副本，工具读到恒 None → apply.cmd 永不拉起；UPDATE_READY
+# 也曾恒 None → "下载并更新"恒灰。稳定契约是**函数返回值**：
+#   check_update() -> {"newer", "latest", ...}；download_and_prepare() -> 脚本路径。
+LATEST_VERSION = None
+PENDING_UPDATE_CMD = None
+
+
 def check_update_menu(_icon=None, _item=None):
+    global LATEST_VERSION
     def worker():
         result = update_helper.check_update(VERSION, force=True)
         if result.get("newer"):
+            LATEST_VERSION = result["latest"]
             notify(i18n.t("notify_update_available", result["latest"], VERSION))
         elif result.get("error"):
+            # 网络失败不动既有状态，避免误清已发现的新版本
             notify(i18n.t("notify_update_check_failed", result["error"]))
         else:
+            LATEST_VERSION = None
             notify(i18n.t("notify_update_latest", VERSION))
         update_menu()
     threading.Thread(target=worker, daemon=True).start()
 
 
 def download_update_menu(_icon=None, _item=None):
-    latest = update_helper.update_ready()
+    global PENDING_UPDATE_CMD
+    latest = LATEST_VERSION
     if not latest or not getattr(sys, "frozen", False):
         return
 
     def worker():
+        global PENDING_UPDATE_CMD
         try:
-            update_helper.download_and_prepare(latest, APP_DIR, UPDATE_DIR, log=log)
+            PENDING_UPDATE_CMD = update_helper.download_and_prepare(latest, APP_DIR, UPDATE_DIR, log=log)
             notify(i18n.t("notify_update_ready"))
         except Exception as exc:
             log(f"update download failed: {exc}")
@@ -1422,7 +1436,7 @@ def build_menu():
         # ② 更新区
         pystray.MenuItem(i18n.t("menu_check_update"), check_update_menu),
         pystray.MenuItem(i18n.t("menu_update_now"), download_update_menu,
-                         enabled=lambda _item: update_helper.update_ready() is not None and getattr(sys, "frozen", False)),
+                         enabled=lambda _item: LATEST_VERSION is not None and getattr(sys, "frozen", False)),
         pystray.Menu.SEPARATOR,
         # ③ 默认入口（双击托盘）
         pystray.MenuItem(i18n.t("menu_open_panel"), open_panel, default=True, enabled=lambda _item: has_url()),
@@ -1559,9 +1573,11 @@ def main():
     threading.Thread(target=monitor_loop, name="dsh-monitor", daemon=True).start()
 
     def startup_update_check():
+        global LATEST_VERSION
         time.sleep(8)
         result = update_helper.check_update(VERSION, force=False)
         if result.get("newer"):
+            LATEST_VERSION = result["latest"]
             notify(i18n.t("notify_update_available_menu", result["latest"], VERSION))
 
     threading.Thread(target=startup_update_check, name="dsh-update-check", daemon=True).start()

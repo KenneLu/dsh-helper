@@ -10,6 +10,16 @@ that dev work lands as local commits only and the version changes only when a
 release is cut (STANDARDS "发版节奏" clause 7). The 1.8.2 bump made earlier in
 this batch was rolled back to 1.8.1.
 
+- Updates (T4): the update path no longer reads `update_helper`'s mutable
+  globals. The discovered version is cached in `LATEST_VERSION` (taken from
+  `check_update()`'s return value), `download_and_prepare()`'s returned script
+  path is stored in `PENDING_UPDATE_CMD`, the "Download and update" item is
+  enabled from that cache, and the quit path launches the stored script. The
+  template package's `import *` had copied `PENDING_CMD` (so `apply.cmd` was
+  never launched) and `UPDATE_READY` was never assigned (item grey forever);
+  keying off return values instead makes this tool independent of that state
+  (verified: `grep update_helper.(PENDING_CMD|UPDATE_READY)` is empty).
+  Also resynced `modules/update_helper` to template 1.2.0.
 - i18n / T1 (bilingual UI): adopted the template `modules/i18n` 2.1.1
   (light form) - `locales/zh.json` (base) + `locales/en.json`, flat KV,
   en falls back to zh. Every tray menu label, notification, dialog, status
