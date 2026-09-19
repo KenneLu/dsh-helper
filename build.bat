@@ -196,6 +196,25 @@ if not exist "%RELEASE_DIR%\_internal\base_library.zip" (
   if not defined NOPAUSE pause
   exit /b 1
 )
+rem Tk runtime D1: the quit/confirm dialogs need it.
+rem Without these the package stays silent until the FIRST dialog - i.e. until the user
+rem clicks Quit. Evidence: opencodex-helper 1.2.2 log 2026-09-19 17:00:51, init.tcl not found.
+rem exe + base_library alone keep every gate green, which is how this gap survived.
+if not exist "%RELEASE_DIR%\_internal\_tkinter.pyd" (
+  echo [ERROR] Tk runtime missing: _internal\_tkinter.pyd - the extension module itself.
+  if not defined NOPAUSE pause
+  exit /b 1
+)
+if not exist "%RELEASE_DIR%\_internal\tcl86t.dll" (
+  echo [ERROR] Tk runtime missing: _internal\tcl86t.dll - the DLL that _tkinter links against.
+  if not defined NOPAUSE pause
+  exit /b 1
+)
+if not exist "%RELEASE_DIR%\_internal\_tcl_data" (
+  echo [ERROR] Tk runtime missing: _internal\_tcl_data - init.tcl lives in here - the first dialog would die.
+  if not defined NOPAUSE pause
+  exit /b 1
+)
 if not exist "%RELEASE_DIR%\_internal\%APPNAME%-taskbar.ico" (
   echo [ERROR] taskbar icon asset missing from the release.
   if not defined NOPAUSE pause
