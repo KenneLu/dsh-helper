@@ -10,6 +10,25 @@ that dev work lands as local commits only and the version changes only when a
 release is cut (STANDARDS "发版节奏" clause 7). The 1.8.2 bump made earlier in
 this batch was rolled back to 1.8.1.
 
+- **Quitting with an update staged no longer flashes a console window.** The exit path
+  used `os.system('start "" /min "<script>"')`, which goes through `cmd` and creates a
+  console for a GUI process that has none - a black box blinks on the desktop as the
+  tray exits - and interpolated the path into a shell string. It now calls
+  `update_helper.launch_pending_cmd()`, which launches `cmd /c <script>` with
+  `CREATE_NO_WINDOW | DETACHED_PROCESS` so the script outlives the parent and completes
+  the swap invisibly (the reme form). This was also the last `MUST-WIRE` symbol the
+  module README declared, so conformance **C-27** ("adoption = copy + wire", new
+  template check) now reports 3/3 instead of failing on this repo.
+- Tests: `test_update_chain.py` pins the new form and would go red if the old one came
+  back - it asserts `launch_pending_cmd` receives the stored path, asserts `os.system`
+  is **not** called, reads the `creationflags` actually handed to the kernel
+  (`134217736` = `CREATE_NO_WINDOW | DETACHED_PROCESS`), and finally runs a real
+  throwaway `.cmd` to prove the child survives the parent and writes its marker.
+- Template resync: `modules/i18n` -> 2.2.0 (`LANG` is no longer a rebindable module
+  global; it is derived from an internal `_STATE`, so `from .i18n import *` cannot copy
+  it - the shape behind the stale-menu bug is now structurally impossible). The call
+  sites already used `current_lang()`, so nothing changed.
+
 - **`APP_DIR` now has exactly one source** (`paths.APP_DIR`). `main.py` used to derive
   its own copy - right when frozen (the exe dir) but `src/` in dev, where `paths` says
   the repo root. The two only had to agree in the packaged build, so the split stayed

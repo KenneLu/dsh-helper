@@ -10,7 +10,9 @@ result["latest"]、download_and_prepare() 的返回脚本路径，状态由工�
 断言：
   ① 发现新版 → 工具缓存 LATEST_VERSION（菜单 enabled 条件）
   ② 下载完成 → 工具缓存 download_and_prepare() 的返回脚本路径
-  ③ 退出路径会以该路径拉起脚本（os.system 实参断言）
+  ③ 退出路径以该路径调 launch_pending_cmd（**不再走 os.system**）
+  ④ 该件的机制证据：真正传给内核的 creationflags 含
+     CREATE_NO_WINDOW|DETACHED_PROCESS（无控制台可闪），且脚本真的被拉起来跑
 """
 import os
 import shutil
@@ -87,10 +89,13 @@ finally:
 check("pending script path stored from return value",
       M.PENDING_UPDATE_CMD == r"C:\tmp\dsh-apply.cmd", repr(M.PENDING_UPDATE_CMD))
 
-# ③ 退出路径以该路径拉起脚本
-calls = []
+# ③ 退出路径以该路径调 launch_pending_cmd；os.system 一旦复活即判失败
+launched = []
+system_calls = []
+M.update_helper.launch_pending_cmd = (
+    lambda cmd=None, log=None: launched.append(cmd) or True)
 _real_system = os.system
-os.system = lambda cmd: calls.append(cmd) or 0    # 只为捕获，不真的执行
+os.system = lambda cmd: system_calls.append(cmd) or 0    # 只为捕获，不真的执行
 M.tray_kit.confirm_quit_dialog = lambda *a, **k: {"go": True, "stop_service": False}
 M.STOP_EVENT.clear()
 try:
@@ -98,7 +103,40 @@ try:
 finally:
     os.system = _real_system
 check("quit launches the stored apply script",
-      bool(calls) and r"C:\tmp\dsh-apply.cmd" in calls[-1], repr(calls))
+      launched == [r"C:\tmp\dsh-apply.cmd"], repr(launched))
+check("quit no longer goes through os.system (the console-flash path is gone)",
+      system_calls == [], repr(system_calls))
+
+# ④ 机制证据：观察真正交给内核的 flags，并让脚本真的跑一次。
+import subprocess as _sp  # noqa: E402
+import modules.update_helper.update_helper as _UH  # noqa: E402
+
+_seen = {}
+_real_popen = _UH.subprocess.Popen
+
+
+class _Popen:
+    def __init__(self, argv, **kw):
+        _seen["argv"] = argv
+        _seen["flags"] = kw.get("creationflags", 0)
+
+
+_UH.subprocess.Popen = _Popen
+try:
+    _ok = _UH.launch_pending_cmd(r"C:\tmp\dsh-apply.cmd", log=lambda *a: None)
+finally:
+    _UH.subprocess.Popen = _real_popen
+_want = getattr(_sp, "CREATE_NO_WINDOW", 0) | getattr(_sp, "DETACHED_PROCESS", 0)
+check("launch flags suppress the console and detach the child",
+      _ok is True and _seen.get("flags") == _want, repr(_seen))
+
+# 真的拉一次：脚本落一个标记文件，证明它脱离父进程后确实跑起来了。
+_marker = Path(_TMP) / "launched.marker"
+_script = Path(_TMP) / "probe.cmd"
+_script.write_text('@echo off\r\necho alive > "%s"\r\n' % _marker, encoding="ascii")
+_ok = _UH.launch_pending_cmd(str(_script), log=lambda *a: None)
+check("the script really runs detached", _ok is True and wait_for(_marker.is_file, 5.0),
+      "marker=%s" % _marker.is_file())
 
 shutil.rmtree(_TMP, ignore_errors=True)
 print("UPDATE CHAIN TEST " + ("FAILED: " + ",".join(FAILS) if FAILS else "OK"), flush=True)

@@ -1305,8 +1305,12 @@ def quit_menu(icon, _item):
     if pids:
         log("quit: managed dsh stopped")
     if PENDING_UPDATE_CMD:
-        # 本进程退出后由脚本接管：等待 → robocopy 铺新版 → 重启新 exe → 自删
-        os.system('start "" /min "%s"' % PENDING_UPDATE_CMD)
+        # 本进程退出后由脚本接管：等待 → robocopy 铺新版 → 重启新 exe → 自删。
+        # 走 update_helper 的收尾件，不用 os.system('start …')：后者经 cmd 新建控制台，
+        # 本进程是没有控制台的 GUI，退出时桌面会闪一下黑框；它还是 shell 字符串插值。
+        # 该件用 CREATE_NO_WINDOW|DETACHED_PROCESS 让脚本脱离父进程继续跑完替换。
+        if not update_helper.launch_pending_cmd(PENDING_UPDATE_CMD, log=log):
+            log("quit: pending update script was NOT launched")
 
 
 def monitor_loop():
