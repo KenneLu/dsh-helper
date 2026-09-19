@@ -1,8 +1,12 @@
-# dsh-helper v1.8.1
+# dsh-helper v1.8.2
 
 **English** | [简体中文](README.zh-CN.md)
 
 Windows tray tool that manages DeepSeek Harness's `dsh web` from a right-click menu: start, stop, restart, open the panel, copy the panel URL, and status refresh. Status refresh runs every 1 minute by default and is adjustable from the menu. The port is fixed at `3080` by default (the official `dsh web` fallback port); only when that port is taken does the current launch fall back to an automatic port.
+
+Added in 1.8.2:
+
+- **Autostart (G4.1)**: the inline registry code was replaced by the family template module `modules/autostart`. Packaged builds now point the Run key at the stable install location (`%LOCALAPPDATA%\dsh-helper\app\dsh-helper.exe`) when it exists, and fall back to the current exe otherwise. On every start `migrate_autostart()` repairs a Run key whose exe has disappeared (e.g. an old package folder was deleted). The autostart state is no longer mirrored into `config.json` — the registry is the single source of truth (F2-01).
 
 Added in 1.7.0:
 
@@ -12,7 +16,7 @@ Added in 1.7.0:
 
 ## Running
 
-Launch `out\dsh-helper-pkg-<YYYYMMDD-HHmmssfff>\dsh-helper.exe`. A grey whale icon appears in the tray; once dsh is running the whale turns blue with a soft warm-gold spout.
+Launch `release\dsh-helper-<version>\dsh-helper.exe`. A grey whale icon appears in the tray; once dsh is running the whale turns blue with a soft warm-gold spout.
 
 **Single instance only**: double-clicking again does not open a second tray — it shows a notice and cancels that launch.
 
@@ -30,7 +34,7 @@ Right-click menu:
 | Restart dsh Web | Graceful stop, then restart on the configured port (default 3080); opens the panel on success |
 | Open dsh panel | Opens the current URL in the default browser (also the double-click default action) |
 | Refresh status | Re-scans dsh processes and listening ports |
-| Autostart | Per-user HKCU Run key, no admin required; the checkbox is only shown when the registered path is this exact program |
+| Autostart | Per-user HKCU Run key (`HKCU\...\Run\dsh-helper`), no admin required; checked = the key exists. Packaged builds prefer the stable install location; a key pointing at a deleted exe is repaired silently on the next start |
 | Start dsh Web on launch | Starts dsh Web automatically after dsh-helper starts |
 | Open config file | Opens the runtime config |
 | dsh.cmd path | Submenu: open path, auto-detect, choose path |
@@ -62,9 +66,11 @@ Icon states: grey whale and spout when dsh is not running; original blue whale w
   "port": 3080,
   "status_refresh_interval_sec": 60,
   "start_on_launch": false,
-  "autostart": false
+  "quit_stop_dsh": false
 }
 ```
+
+Autostart is **not** stored here: its single source of truth is the `HKCU\...\Run\dsh-helper` registry value (F2-01). `quit_stop_dsh` is the persisted "also stop dsh on quit" checkbox (default off).
 
 `port` defaults to `3080` (the official dsh web fallback port, matching the VS Code extension). Before starting, the port is probed: free means it is used as-is; **taken means this launch falls back to a free port**, with the reason in the notification and log. `0` means never fix a port — dsh/the OS picks a free one each time. Avoid the Windows dynamic range (49152–65535) or a random ephemeral port may steal it.
 
@@ -84,7 +90,17 @@ build.bat nopause
 
 `build.bat` runs a compile gate, builds an `onedir/noconsole` package into `release\dsh-helper-<version>\`, then runs `--smoke` to verify the dsh command and port decision (fixed port when free, otherwise automatic fallback). Each version builds into its own folder; an existing folder makes the build fail so every package is reproducible.
 
-Official releases are built by CI: push a `v<semver>` tag (e.g. `v1.7.0`) and the release workflow publishes a zip + sha256 on GitHub Releases — the same layout the in-app updater consumes. The shipped exe is named `dsh-helper.exe` without a version (the autostart registry stores the full path; versions live in the zip/folder names).
+Official releases are built by CI: push a `v<semver>` tag (e.g. `v1.8.2`) and the release workflow publishes a zip + sha256 on GitHub Releases — the same layout the in-app updater consumes. The shipped exe is named `dsh-helper.exe` without a version (the autostart registry stores the full path; versions live in the zip/folder names).
+
+## Not yet enabled / known gaps
+
+Documented per §I-10 (declare untriggered capabilities and their reasons):
+
+- **Stable install location (§G4.1-1)**: `paths.INSTALL_DIR`/`INSTALL_EXE` (`%LOCALAPPDATA%\dsh-helper\app\`) are defined and autostart already prefers them, but the updater still replaces the running package in place — nothing installs a build into the stable folder yet. Until then autostart falls back to the current exe path.
+- **i18n (§T1)**: the repository is public, so the localization trigger is met, but there is no `i18n` module — all menu/notification text is hardcoded Chinese.
+- **Settings window (§T3)**: preferences live in the tray menu only (autostart, start-on-launch, refresh interval, quit cleanup); there is no single settings dialog.
+- **`tests/` and `release.bat`**: neither exists. The only business check is the frozen `--smoke` run inside `build.bat`, and it makes no assertions (D1-05/D3-02).
+- **Update pending idempotency (§G4-02)**: `paths.process_pending_update()` exists but is not wired into startup, so an interrupted update swap is not retried.
 
 ## FAQ
 
@@ -93,7 +109,7 @@ Official releases are built by CI: push a `v<semver>` tag (e.g. `v1.7.0`) and th
 - **Want a fixed address**: 3080 is fixed by default; to change it, set `config.json`'s `port` to a free port outside 49152–65535.
 - **DSH 0.1.2+ token URLs**: never hand-edit `?token=...` out of the URL; a fresh token is generated on each restart.
 - **What happens to dsh on Quit**: Quit first opens a confirm dialog with a "Also stop the current dsh service" checkbox. The choice is remembered the moment you toggle it (default: off — dsh keeps running after the tray exits; that is a normal, healthy state and the tray re-adopts the service on its next start). If the checkbox is on, dsh is stopped gracefully first (up to 8 s) so plugins dispose and sessions flush, then the tray exits. During those 8 seconds the status line shows "Stopping", the icon turns grey, and Start/Stop/Restart/Quit are all disabled — intentional; let it finish.
-- **Autostart unchecked but the registry entry exists**: the Run key does not point at this exact program (the package folder moved, or the old package was deleted). The checkbox means "it will actually start next boot, and it will be this one" — so unchecked is honest. Click "Autostart" once to overwrite with the current path. The program never edits the registry on its own.
+- **Autostart points at an old package**: since 1.8.2 the tool repairs itself. If the Run key points at an exe that no longer exists (an old package folder was deleted, or the folder was renamed), the next start silently rewrites the key to the current path (or to the stable install location when one exists) and logs `autostart migrated`. Toggle "Autostart" off and on again to force a rewrite.
 - **A notice says "already running" after double-clicking**: one tray instance is already alive (the whale in the notification area); the single-instance guard cancelled this launch.
 - **Correct order when switching versions**: quit the old instance before starting the new package. The mutex name is fixed and version-less, so all versions from 1.5 on mutually block across versions — starting a new package while an old one runs shows "already running". Versions 1.4 and earlier have no guard. Since 1.7.0, the in-app updater handles this: quit the tray and it swaps and restarts for you.
 - **Tray right-click unresponsive / menu clicks do nothing**: known 1.4/1.5 bug — graceful stop left dangling console handles, `subprocess` threw `WinError 6`, and the exception escaping a menu callback stalled menu rendering. **Fixed in 1.6** (handles restored; query failures only log). Kill `dsh-helper-*.exe` from Task Manager if you hit it; dsh is unaffected.

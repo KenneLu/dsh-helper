@@ -3,6 +3,23 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
+## 1.8.2
+
+- Autostart (G4.1): the inline Run-key code was replaced by the family
+  template module `modules/autostart` (T3, template 1.1.1, byte-identical
+  copy; sync_check now gates it). Packaged builds now prefer the stable
+  install location (`%LOCALAPPDATA%\dsh-helper\app\dsh-helper.exe`) when it
+  exists instead of always pinning the current package folder, so a version
+  folder change no longer breaks autostart.
+- Autostart self-heal (G4.1-3/5): `migrate_autostart()` runs at startup and
+  silently rewrites a Run value whose exe no longer exists (old package
+  folder deleted) - verified against a seeded dead link.
+- Single source of truth (F2-01): the `autostart` key was removed from
+  `config.json`; the registry value is now the only state, so the config and
+  the Run key can no longer disagree.
+- Build gate: `src\modules\autostart\autostart.py` added to the py_compile
+  step so the new module is import-covered.
+
 ## 1.8.1
 
 - Internal structure: family template modules now live under
@@ -29,9 +46,6 @@ The tagging convention matches the versions in this file.
   a `paths.py` module, rotating logging via `log_kit.py`, and the single-instance
   guard / URL masking via `tray_kit.py` - all byte-identical copies of the family
   template modules (my-diy-tool-template), verified by the build's sync_check gate.
-
-## Unreleased
-
 - Bilingual README (baseline 8): `README.md` is now the English canonical
   version with `README.zh-CN.md` as the Chinese one, language switch lines on
   top of both; stale 1.6-era menu names and packaging paths refreshed. Both

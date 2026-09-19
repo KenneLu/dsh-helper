@@ -24,11 +24,11 @@ import psutil
 import pystray
 from PIL import Image, ImageDraw, ImageOps
 
-from modules import log_kit, paths, tray_kit, update_helper   # noqa: E402
+from modules import autostart, log_kit, paths, tray_kit, update_helper   # noqa: E402
 
 
 APP_NAME = "dsh-helper"
-VERSION = "1.8.1"
+VERSION = "1.8.2"
 APP_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 # 用户数据区/配置/日志/更新暂存：唯一出处是 T2 paths（数据区住 LOCALAPPDATA，
 # 1.6 及以前的 exe 旁旧配置由播种自动迁入）。
@@ -90,7 +90,8 @@ DEFAULT_CONFIG = {
     "port": DEFAULT_PORT,
     "status_refresh_interval_sec": DEFAULT_STATUS_REFRESH_INTERVAL_SEC,
     "start_on_launch": False,
-    "autostart": False,
+    # 自启状态不落 config（F2-01 单一真源 = HKCU Run）：注册表是唯一出处，
+    # 托盘勾选直接读注册表，见 modules/autostart。
     # G4.2 条款 5：退出清理勾选，持久化、默认不勾——不勾 = dsh 服务放行继续运行
     "quit_stop_dsh": False,
 }
@@ -129,7 +130,8 @@ def load_config():
     if merged["status_refresh_interval_sec"] not in STATUS_REFRESH_INTERVAL_VALUES:
         merged["status_refresh_interval_sec"] = DEFAULT_STATUS_REFRESH_INTERVAL_SEC
     merged["start_on_launch"] = bool(merged.get("start_on_launch", False))
-    merged["autostart"] = bool(merged.get("autostart", False))
+    # 旧版遗留的 "autostart" 键不再读取（真源=注册表）；不主动删除以免破坏用户文件，
+    # 下次 save_config 落盘时自然消失（F2-01）。
     return merged
 
 
@@ -146,7 +148,6 @@ def save_config():
                     "port": CFG.get("port", DEFAULT_PORT),
                     "status_refresh_interval_sec": current_status_refresh_interval(),
                     "start_on_launch": bool(CFG.get("start_on_launch", False)),
-                    "autostart": bool(CFG.get("autostart", False)),
                     # G4.2 条款 5：退出清理勾选必须随 save_config 落盘——
                     # on_change 即勾即存走的就是这里，漏键 = 持久化静默失效。
                     "quit_stop_dsh": bool(CFG.get("quit_stop_dsh", False)),
@@ -1195,88 +1196,16 @@ def open_config(_icon, _item):
     os.startfile(str(CONFIG_PATH))  # noqa: S606
 
 
-RUN_KEY = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
-RUN_NAME = "dsh-helper"
-
-
-def autostart_command():
-    """set_autostart 会写进 Run 项的完整命令行。"""
-    executable = sys.executable if getattr(sys, "frozen", False) else str(Path(__file__).resolve())
-    if getattr(sys, "frozen", False):
-        return f'"{executable}"'
-    return f'"{sys.executable}" "{executable}"'
-
-
-def registered_autostart_command():
-    """读回 Run 项里登记的命令行；没有该项返回 None。
-
-    这个函数跑在菜单的 checked 回调里：一旦抛异常，整个菜单渲染都会失败。所以查询本身
-    出错时只记日志并当作「未登记」，让勾选显示为未勾选，而不是打坏菜单。
-    """
-    try:
-        result = subprocess.run(
-            ["reg", "query", RUN_KEY, "/v", RUN_NAME],
-            capture_output=True,
-            text=True,
-            creationflags=CREATE_NO_WINDOW,
-        )
-    except OSError as exc:
-        log(f"autostart registry query failed: {exc}")
-        return None
-    if result.returncode != 0:
-        return None
-    for line in (result.stdout or "").splitlines():
-        if "REG_SZ" in line:
-            value = line.partition("REG_SZ")[2].strip()
-            if value:
-                return value
-    return None
-
-
-def _fold_command(text):
-    """比对命令行用：忽略大小写、斜杠方向和多余空白。"""
-    return os.path.normcase(os.path.expandvars(" ".join(str(text).split())))
-
-
-def autostart_enabled():
-    """勾选状态反映「下次开机真的会起来，而且起来的正是这一个」。
-
-    只看 Run 项在不在会骗人：build.bat 每次都生成新的时间戳包目录，换了目录以后老项
-    仍然存在，于是开机静默失败或悄悄拉起旧版本，而菜单却显示已开启。所以这里把登记的
-    命令行一起比对；对不上就如实显示未勾选，由用户点一次写入正确路径（不会自动改写）。
-    """
-    registered = registered_autostart_command()
-    if not registered:
-        return False
-    return _fold_command(registered) == _fold_command(autostart_command())
-
-
-def set_autostart(enabled):
-    if enabled:
-        command = autostart_command()
-        result = subprocess.run(
-            ["reg", "add", RUN_KEY, "/v", RUN_NAME, "/t", "REG_SZ", "/d", command, "/f"],
-            capture_output=True,
-            text=True,
-            creationflags=CREATE_NO_WINDOW,
-        )
-        ok = result.returncode == 0
-    else:
-        result = subprocess.run(
-            ["reg", "delete", RUN_KEY, "/v", RUN_NAME, "/f"],
-            capture_output=True,
-            text=True,
-            creationflags=CREATE_NO_WINDOW,
-        )
-        ok = result.returncode == 0
-    CFG["autostart"] = bool(enabled and ok)
-    save_config()
-    notify("开机自启已开启" if enabled and ok else "开机自启已关闭" if not enabled and ok else "开机自启设置失败")
-    update_menu()
+# 自启三件套（含稳定位指向与启动自愈）全部来自 T3 模板件 modules/autostart；
+# main.py 只保留托盘开关的 UI 反馈。F2-01：状态真源 = HKCU Run，不再双写 config。
 
 
 def toggle_autostart(_icon, _item):
-    set_autostart(not autostart_enabled())
+    enabled = not autostart.is_autostart_enabled()
+    autostart.set_autostart(enabled)
+    ok = autostart.is_autostart_enabled() == enabled
+    notify("开机自启已开启" if enabled and ok else "开机自启已关闭" if not enabled and ok else "开机自启设置失败")
+    update_menu()
 
 
 def toggle_start_on_launch(_icon, _item):
@@ -1495,7 +1424,7 @@ def build_menu():
         pystray.MenuItem("打开日志目录", open_log),
         pystray.Menu.SEPARATOR,
         # ⑦ 偏好区
-        pystray.MenuItem("开机自启", toggle_autostart, checked=lambda _item: autostart_enabled()),
+        pystray.MenuItem("开机自启", toggle_autostart, checked=lambda _item: autostart.is_autostart_enabled()),
         pystray.MenuItem("启动时自动启动 dsh Web", toggle_start_on_launch,
                          checked=lambda _item: bool(CFG.get("start_on_launch", False))),
         pystray.MenuItem("状态刷新间隔", build_status_refresh_interval_menu()),
@@ -1545,6 +1474,9 @@ def main():
                                          hint="请看任务栏右下角通知区域里的鲸鱼图标，本次启动已取消，不会多开一个托盘。")
         return
     log(f"startup {APP_NAME} v{VERSION} (pid {os.getpid()})")
+    # G4.1 条款 3/5：启动自愈——存量 Run 键指向的 exe 已消失（换版本目录被删）时，
+    # 静默重写到当前正确位置（优先稳定安装位 INSTALL_EXE，见 modules/autostart）。
+    autostart.migrate_autostart(log=log)
     needs_command_detection = command_needs_startup_detection()
     set_state(
         command_status="checking" if needs_command_detection else "ready",

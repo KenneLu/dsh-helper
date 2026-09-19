@@ -66,7 +66,7 @@ if not errorlevel 1 (
 )
 
 echo [GATE] py_compile src\main.py + src\icons.py + src\modules ...
-"%PY%" -m py_compile src\main.py src\icons.py src\modules\appconfig\appconfig.py src\modules\update_helper\update_helper.py src\modules\paths\paths.py src\modules\log_kit\log_kit.py src\modules\tray_kit\tray_kit.py
+"%PY%" -m py_compile src\main.py src\icons.py src\modules\appconfig\appconfig.py src\modules\autostart\autostart.py src\modules\update_helper\update_helper.py src\modules\paths\paths.py src\modules\log_kit\log_kit.py src\modules\tray_kit\tray_kit.py
 if errorlevel 1 (
   echo [ERROR] compile gate failed.
   if not defined NOPAUSE pause
