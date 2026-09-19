@@ -3,7 +3,10 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
-## 1.8.2
+## Unreleased
+
+Version tier pending owner confirmation (D16): drafted as +0.0.1 (1.8.1 -> 1.8.2);
+the number and this section name land only after sign-off (team-lead ruling).
 
 - Autostart (G4.1): the inline Run-key code was replaced by the family
   template module `modules/autostart` (T3, template 1.1.1, byte-identical
@@ -13,7 +16,8 @@ The tagging convention matches the versions in this file.
   folder change no longer breaks autostart.
 - Autostart self-heal (G4.1-3/5): `migrate_autostart()` runs at startup and
   silently rewrites a Run value whose exe no longer exists (old package
-  folder deleted) - verified against a seeded dead link.
+  folder deleted) - verified against a seeded dead link. When the value is
+  absent the call is a strict no-op: it never creates a new autostart entry.
 - Single source of truth (F2-01): the `autostart` key was removed from
   `config.json`; the registry value is now the only state, so the config and
   the Run key can no longer disagree.
