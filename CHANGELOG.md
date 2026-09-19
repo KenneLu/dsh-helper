@@ -4,6 +4,34 @@ All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
 ## Unreleased
+- **English mode: the quit dialog and the duplicate-launch popup still showed Chinese** (2026-09-19
+  defect, found by extending the R-07 scan surface to the call sites). `tray_kit.confirm_quit_dialog`
+  and `warn_duplicate_instance` are **pure-mechanism** helpers - their docstring (2.0.2 / E4-02)
+  states that an i18n-enabled tool must pass `title`/`body_text`/`confirm_text`/`cancel_text` as
+  `t()` entries and that the built-in Chinese wording is only a compatibility default for old call
+  sites. Both of our call sites passed **no text argument at all**, so the defaults leaked: in
+  English mode the quit dialog body and its buttons - and the duplicate-launch popup body - were
+  still Chinese. The rich dialog was the worse half: the **native fallback** used a translated
+  `quit_native_text`, i.e. the degraded path was localised while the normal path was not.
+  Fix: pass `body_text`/`confirm_text`/`cancel_text`, and `message=` on the popup. The dialog body
+  **reuses the existing `quit_native_text`** (it is already control-agnostic and carries the app
+  name) instead of adding a same-text `quit_confirm_body` - one sentence must not have two sources.
+  Three keys added (`quit_confirm_yes`/`quit_confirm_no`/`dup_running`); `title` is deliberately
+  **not** passed, because the template falls back to `app_name`, which is already correct in both
+  languages.
+  Regression: `tests/test_i18n_keys.py` (new) - a static assertion that every `i18n.t("<literal>")`
+  key exists in **both** tables, with three self-checks (non-empty scan surface / a known-bad key is
+  caught / a known-good key is not), because `t()` returns the **key name itself** for a missing key
+  and the build's i18n gate only covers 9 core keys - so a forgotten key ships as visible key text
+  with every gate green. `build.bat` picks the suite up automatically (`for %%t in (tests	est_*.py)`).
+- **Module-copy hygiene in the same batch: six `__init__.py` carried the template's own header form**
+  (raw byte copies, including the template's `# TEMPLATE-MODULE:` line and its stale-looking
+  `TEMPLATE-VER`), so the provenance link back to the template path was missing - and C-19 accepts
+  both header forms, so no gate would have reported it. Translated to `# TEMPLATE-FROM: ...`, first
+  line only, each copy keeping **its own file's** version (not the sibling module's).
+  `update_helper.py` was re-copied from the template byte-exactly as well (the 1.4.4 change was
+  docstring prose only, zero code).
+
 - **Quit no longer fails closed when the dialog chain is unavailable** (2026-09-19 defect: the
   tool could not be exited at all, only killed from Task Manager). `tkinter.Tk()` raising
   `TclError` - a hollowed `_internal/`, i.e. no usable `init.tcl` - made both the rich dialog and
