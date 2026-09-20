@@ -29,6 +29,30 @@ jobs:
       - name: Import check (module-level config seed + menu data must not blow up)
         run: python -c "import sys; sys.path.insert(0, 'src'); import main; print('import OK, VERSION =', main.VERSION)"
 
+      # The whole tests/ suite was reachable ONLY from build.bat, i.e. only from the
+      # tag-triggered release workflow - so a fix to a gate could not be verified without
+      # cutting a release (found while fixing exactly that in local-speak2text/reme-helper).
+      # Run it on every push, with the same suite-wide data-dir pin build.bat uses: that pin
+      # is the F11/D12 "belt and braces" - a test file that forgets its own pin must still
+      # not touch the machine's real data root.
+      # The failing file is named via an annotation, because step logs need sign-in while
+      # run-page annotations are public text.
+      - name: Test suite (tests/test_*.py)
+        shell: pwsh
+        env:
+          DSH_HELPER_DATA_DIR: ${{ github.workspace }}\build\test-data
+        run: |
+          $fail = @()
+          Get-ChildItem tests/test_*.py | Sort-Object Name | ForEach-Object {
+            Write-Host "== $($_.Name) =="
+            python $_.FullName
+            if ($LASTEXITCODE -ne 0) { $fail += $_.Name }
+          }
+          if ($fail.Count -gt 0) {
+            Write-Host ("::error title=tests failed::" + ($fail -join '%0A'))
+            exit 1
+          }
+
       - name: Update logic check
         run: |
           python -c "import sys; sys.path.insert(0, 'src'); from modules.update_helper.update_helper import _version_is_newer as v, _tag_to_version as t; assert v('1.8.0','1.7.0'); assert not v('1.7.0','1.7.0'); assert t('v1.8.0')=='1.8.0'; print('update logic OK')"
