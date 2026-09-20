@@ -54,11 +54,13 @@ rem reference a stable name; the release folder and zip name carry the version.
 
 echo [VERSION] %VERSION%  release: %RELEASE_DIR%
 
-if exist "%RELEASE_DIR%" (
-  echo [ERROR] %RELEASE_DIR% already exists. Delete it or bump VERSION.
-  if not defined NOPAUSE pause
-  exit /b 1
-)
+rem G1 RELAXED (2026-09-19, C2): target-dir existence is INFO, not a refusal.
+rem The refusal condition is the running-instance guard below (D1-02); safety comes
+rem from C2 - the live instance holds its own exe (no FILE_SHARE_DELETE), so the
+rem kernel rejects deleting it with winerror 32 rather than emptying it silently.
+rem CLEANLINESS IS NOT RELAXED: the old dir is removed right after that guard, so
+rem the build always assembles from scratch and never reuses a stale file.
+if exist "%RELEASE_DIR%" echo [INFO] %RELEASE_DIR% exists - will be removed and rebuilt from scratch.
 
 rem Running-instance guard (D1-02 refined 2026-09-19): refuse ONLY when the live
 rem instance runs FROM THE TARGET release dir. Building a DIFFERENT version dir is
@@ -94,6 +96,19 @@ if defined RUNNING_DIR if /i "%RUNNING_DIR%"=="%TARGET_DIR%" (
   exit /b 1
 )
 if defined RUNNING_DIR echo [INFO] %APPNAME% running from "%RUNNING_DIR%" - not the target dir, build continues.
+
+rem G1 relaxed: remove the existing same-version dir NOW (after the guard) so the
+rem assembly below starts from zero. A live instance would have been refused above;
+rem any other lock makes rmdir fail loudly right here instead of silently reusing.
+if exist "%RELEASE_DIR%" (
+  echo [INFO] removing %RELEASE_DIR% - rebuild from scratch ...
+  rmdir /s /q "%RELEASE_DIR%"
+)
+if exist "%RELEASE_DIR%" (
+  echo [ERROR] could not remove %RELEASE_DIR% - it is locked, possibly by a live instance.
+  if not defined NOPAUSE pause
+  exit /b 1
+)
 
 echo [GATE] py_compile src\main.py + src\icons.py + src\modules ...
 "%PY%" -m py_compile src\main.py src\icons.py src\modules\appconfig\appconfig.py src\modules\autostart\autostart.py src\modules\i18n\i18n.py src\modules\update_helper\update_helper.py src\modules\paths\paths.py src\modules\log_kit\log_kit.py src\modules\tray_kit\tray_kit.py
