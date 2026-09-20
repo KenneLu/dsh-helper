@@ -1768,6 +1768,11 @@ def main():
                                   i18n.t("dup_hint")]))
         return
     log(f"startup {APP_NAME} v{VERSION} (pid {os.getpid()})")
+    # C-38（§4.1.38 的**唯一正本样例**，勿自创变体）：`startup` 行之后紧跟两行
+    # **解析后**的数据根与配置路径。为什么值得：`python -c` / heredoc 探针**不落盘**，
+    # 源码扫描原理上覆盖不到它们；能定死归属的只有**产物自带的这行日志**。
+    log("data root: %s" % USER_DATA_DIR)
+    log("config   : %s" % CONFIG_PATH)
     # T2/C-2（paths 1.1.4，MUST-WIRE）：让"本实例的 exe 不可被删除/改名"由**内核**保证，
     # 而不是由纪律保证。持有的是一个**不含 FILE_SHARE_DELETE** 的句柄 ⇒ 删除方（构建脚本 /
     # 手工 `rm -r` / 未来的 --clean）会**大声失败**，而不是把正在运行的实例目录静默掏空
