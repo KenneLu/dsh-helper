@@ -30,7 +30,7 @@ from modules.appconfig import APP_ID, ICON_ASSET as ICON_ASSET_REL   # noqa: E40
 
 
 APP_NAME = "dsh-helper"
-VERSION = "1.8.1"
+VERSION = "1.8.2"
 # 程序本体目录**不在本文件派生**：唯一出处是 T2 paths 的 APP_DIR（打包后 = exe 所在
 # 目录，开发态 = 仓库根）。这里曾另有一份同名派生量（开发态 = src/），与 paths 分叉，
 # 只在冻结态碰巧重合——于是 dev 下 ICON_ASSET 解析成 src/resources/img/… 取不到，

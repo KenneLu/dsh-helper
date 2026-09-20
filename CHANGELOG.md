@@ -3,7 +3,14 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
-## Unreleased
+## 1.8.2
+- **Startup self-identification** (2026-09-20, C-38): the `startup` line is now followed by the
+  **resolved** data root and config path - `data root: <USER_DATA_DIR>` / `config   : <CONFIG_PATH>`,
+  the canonical form given by CONFORMANCE §4.1.38. Why it earns a log line: probes launched via
+  `python -c` or a heredoc **never touch disk**, so no source-code scan can attribute the artefacts
+  they leave behind; the only evidence tying a run to a data root is the log the product itself
+  writes. Placed right after the single-instance guard (the point where "this startup succeeded")
+  and before the C-2 delete-guard, so that guard's "only legal window" constraint is not moved.
 - **English mode: the quit dialog and the duplicate-launch popup still showed Chinese** (2026-09-19
   defect, found by extending the R-07 scan surface to the call sites). `tray_kit.confirm_quit_dialog`
   and `warn_duplicate_instance` are **pure-mechanism** helpers - their docstring (2.0.2 / E4-02)
