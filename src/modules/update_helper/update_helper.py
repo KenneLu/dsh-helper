@@ -189,8 +189,8 @@ rem stdin forever) and the update silently never happens. tasklist writes to a f
 rem and find reads that file instead. (reme-helper: measured 0.13s vs hang.)
 rem
 rem %SystemRoot%\System32 ON EVERY EXTERNAL COMMAND BELOW - never the bare name.
-rem PATH is not ours to assume. Measured on this machine: `where find` ->
-rem H:\Tools\Git\usr\bin\find.exe FIRST (PATH index 5) and C:\Windows\System32
+rem PATH is not ours to assume. Measured on one machine: `where find` ->
+rem <third-party>\Git\usr\bin\find.exe FIRST (PATH index 5) and C:\Windows\System32
 rem only at index 13. GNU find reads "/i" and the image name as PATH arguments, so
 rem it exits 1 for every input - the "if errorlevel 1 goto gone" below then fires on
 rem the FIRST tick, %tries% stays 1, :giveup is unreachable, and the wait loop never
