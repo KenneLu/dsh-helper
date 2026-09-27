@@ -6,8 +6,8 @@ Windows 托盘工具，用右键菜单管理 DeepSeek Harness 的 `dsh web`：�
 
 未发版（开发期只做本地 commit，版本号只在发版时改）：
 
-- **中英双语界面（T1）**：托盘菜单、通知、弹窗、状态行与错误信息全部走家族模板件 `modules/i18n`，`locales/zh.json` 为基准表、`locales/en.json` 缺失键回退中文。偏好区新增 **「语言 / Language」** 项，一键切换并写入 `config.json` 的 `language`（默认 `auto`＝跟随 Windows UI 语言），切换后**立即重建菜单**。路径、服务名、`dsh.cmd` 等数据不参与翻译。
-- **开机自启（G4.1）**：内联注册表代码改为家族模板件 `modules/autostart`。打包态优先指向稳定安装位（`%LOCALAPPDATA%\dsh-helper\app\dsh-helper.exe`，存在时），否则退回当前 exe；每次启动都会执行 `migrate_autostart()`，把指向"已消失的 exe"（旧包目录被删）的 Run 键静默修回正确路径。自启状态不再镜像进 `config.json`——注册表是唯一真源（F2-01）。
+- **中英双语界面（T1）**：托盘菜单、通知、弹窗、状态行与错误信息全部走家族模板件 `template/i18n`，`locales/zh.json` 为基准表、`locales/en.json` 缺失键回退中文。偏好区新增 **「语言 / Language」** 项，一键切换并写入 `config.json` 的 `language`（默认 `auto`＝跟随 Windows UI 语言），切换后**立即重建菜单**。路径、服务名、`dsh.cmd` 等数据不参与翻译。
+- **开机自启（G4.1）**：内联注册表代码改为家族模板件 `template/autostart`。打包态优先指向稳定安装位（`%LOCALAPPDATA%\dsh-helper\app\dsh-helper.exe`，存在时），否则退回当前 exe；每次启动都会执行 `migrate_autostart()`，把指向"已消失的 exe"（旧包目录被删）的 Run 键静默修回正确路径。自启状态不再镜像进 `config.json`——注册表是唯一真源（F2-01）。
 
 1.7.0 起的补充能力：
 
@@ -104,7 +104,7 @@ build.bat nopause
 - **设置窗口（§T3）**：偏好项（自启、启动时启动、刷新间隔、退出清理）只存在于托盘菜单，没有统一设置对话框。
 - **`release.bat`**：不存在。`tests/` 已存在（2026-09-19）——`tests/test_*.py` 覆盖单实例守卫、真实启动路径、语言切换菜单刷新、更新链、UI 封送与退出 fail-open 路径，且 `build.bat` 把**每一个**都当门禁跑，冻结的 `--smoke` 不再是唯一业务检查。
 - **更新 pending 幂等（§G4-02）**：`paths.process_pending_update()` 已存在但未接入启动流程，中断的换装不会重试。
-- **`service_link`（§G4.2 参考状态机）**：模板已提供 `modules/service_link`（NONE → ADOPTED/OWNED → NONE），dsh-helper 仍是内联实现接入与停止。行为通过评审，但未采纳共享状态机。
+- **`service_link`（§G4.2 参考状态机）**：模板已提供 `template/service_link`（NONE → ADOPTED/OWNED → NONE），dsh-helper 仍是内联实现接入与停止。行为通过评审，但未采纳共享状态机。
 - **退出路径 fail-open（§G4.1-4 / T7）—— 过渡版内联形态，待吸收模板件**：弹窗链路不可用时（`Tk()` 抛 `TclError`，例如 `_internal/` 被掏空），`quit_menu` 记一行日志后按 `quit_stop_dsh=False` 照常退出，不再静默拒绝退出。它**刻意**是 `quit_menu` 内的本地三态裁决；义务是待 `tray_kit` 提供统一形态后改为调用共享件（见 CHANGELOG `## Unreleased`）。
 
 ## 常见问题

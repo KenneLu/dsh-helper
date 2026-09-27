@@ -124,7 +124,7 @@ check("quit no longer goes through os.system (the console-flash path is gone)",
 
 # ④ 机制证据：观察真正交给内核的 flags，并让脚本真的跑一次。
 import subprocess as _sp  # noqa: E402
-import modules.update_helper.update_helper as _UH  # noqa: E402
+import template.update_helper.update_helper as _UH  # noqa: E402
 
 _seen = {}
 _real_popen = _UH.subprocess.Popen

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/tray_kit/tray_kit.py | TEMPLATE-VER: 2.2.1
+# TEMPLATE-FROM: my-diy-tool-template/template/tray_kit/tray_kit.py | TEMPLATE-VER: 2.2.1
 """T7｜托盘机制件：单实例互斥体、退出请求文件 + 监视循环、面板地址行掩码、菜单签名重画、退出确认框（2.0.0）。
 
 2.2.0：**合法性判据单一化**——新增 `mutex_name_ok(name)`（纯字符串判定：非空字符串、

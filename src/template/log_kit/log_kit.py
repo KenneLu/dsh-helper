@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/log_kit/log_kit.py | TEMPLATE-VER: 1.0.3
+# TEMPLATE-FROM: my-diy-tool-template/template/log_kit/log_kit.py | TEMPLATE-VER: 1.0.4
+# 1.0.4（W1 改名过渡）：模块互引改双式导入（try modules. / except template.）；W1 收尾步统一。
 # 1.0.3：`log` 改 **print 形态**（`def log(*parts)`，空格拼接 `str(part)`）。
 #   根因是**契约冲突**：`update_helper`（同批派发件）里 7 处按 print 形态调用
 #   （`log("downloading", stem)` / `log("update staged:", a, "->", b, "(bat %s)" % s)`），
@@ -20,7 +21,10 @@
 """
 import os
 
-from modules.appconfig import APP_ID
+try:                                     # W1 改名过渡：旧布局 src/modules/（四仓迁完删 try 分支）
+    from modules.appconfig import APP_ID
+except ImportError:                      # 新布局 src/template/
+    from template.appconfig import APP_ID
 
 LOG_MAX_BYTES = 1 << 20      # 1 MB per file
 LOG_BACKUPS = 3              # <app>.log.1 ... .3

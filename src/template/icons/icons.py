@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-MODULE: icons | TEMPLATE-VER: 2.0.1
+# TEMPLATE-FROM: my-diy-tool-template/template/icons/icons.py | TEMPLATE-VER: 2.0.1
 # 2.0.1（W1 改名过渡）：模块互引改双式导入（try modules. / except template.）；W1 收尾步统一。
 """T6｜代码生成双 ico（G5）：构建期生成，仓库里不进二进制图标资源。
 

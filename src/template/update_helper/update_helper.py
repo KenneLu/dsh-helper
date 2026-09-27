@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/update_helper/update_helper.py | TEMPLATE-VER: 1.4.5
+# TEMPLATE-FROM: my-diy-tool-template/template/update_helper/update_helper.py | TEMPLATE-VER: 1.4.6
+# 1.4.6（W1 改名过渡）：模块互引改双式导入（try modules. / except template.），
+#   兼容工具侧 src/modules/（未迁移）与 src/template/（已迁移）两种布局；W1 收尾步统一为 template.。
 # 1.4.5（任务 #32/T4）：**接口扩展，让"更新源运行时可配"能迁到模板**——
 #   `check_update(..., repo=None)` / `download_and_prepare(..., repo=None)`：
 #   缺省仍走 appconfig 的 `REPO`；l-s2t 的 `config.json:update_repo` 有三重用户可见
@@ -105,7 +107,10 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from modules.appconfig import APP_ID, EXE_NAME, REPO_NAME, REPO_OWNER
+try:                                     # W1 改名过渡：旧布局 src/modules/（四仓迁完删 try 分支）
+    from modules.appconfig import APP_ID, EXE_NAME, REPO_NAME, REPO_OWNER
+except ImportError:                      # 新布局 src/template/
+    from template.appconfig import APP_ID, EXE_NAME, REPO_NAME, REPO_OWNER
 
 REPO = f"{REPO_OWNER}/{REPO_NAME}"
 # 检查节流窗口（进程内：见 check_update 的说明——跨进程不生效，别把它当持久化配额保护）

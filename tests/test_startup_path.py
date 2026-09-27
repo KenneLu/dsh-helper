@@ -24,8 +24,8 @@ os.environ["DSH_HELPER_CONFIG"] = str(Path(_TMP) / "config.json")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import pystray  # noqa: E402
 import main as M  # noqa: E402
-from modules.paths import LOG_PATH  # noqa: E402
-from modules.update_helper.update_helper import (  # noqa: E402
+from template.paths import LOG_PATH  # noqa: E402
+from template.update_helper.update_helper import (  # noqa: E402
     TEMP_PREFIX,
     failed_marker_path,
     pop_failed_update_note as real_pop,
@@ -160,13 +160,13 @@ check("log written inside the isolated data dir", str(LOG_PATH).startswith(_TMP)
 # 程序本体目录只有一个来源（paths.APP_DIR）：main.py 曾自行再派生一份（开发态 = src/），
 # 冻结态碰巧重合所以从未暴露；dev 下 ICON_ASSET 取不到、_load_icon_base() 静默走兜底图。
 # §B1 dev 态锚定纪律要求路径断言落在测试里，而不是靠人记得。
-from modules.paths import APP_DIR as _PATHS_APP_DIR  # noqa: E402
+from template.paths import APP_DIR as _PATHS_APP_DIR  # noqa: E402
 check("APP_DIR has a single source (paths, not a local re-derivation)",
       M.APP_DIR == _PATHS_APP_DIR, "%s vs %s" % (M.APP_DIR, _PATHS_APP_DIR))
 check("icon asset resolves in dev mode", Path(M.ICON_ASSET).is_file(), str(M.ICON_ASSET))
 # 同名派生量只许有一个来源：运行时解析的必须是 appconfig.ICON_ASSET 那一条
 # （icons.py 构建期读的也是它），否则改了名字会 ico 变了、托盘图没变，静默分叉。
-import modules.appconfig as _AC  # noqa: E402
+import template.appconfig as _AC  # noqa: E402
 check("ICON_ASSET derives from appconfig (single source of the relative path)",
       bool(_AC.ICON_ASSET) and Path(M.ICON_ASSET).as_posix().endswith(_AC.ICON_ASSET),
       "%s  <-  %s" % (M.ICON_ASSET, _AC.ICON_ASSET))
@@ -175,8 +175,8 @@ check("ICON_ASSET derives from appconfig (single source of the relative path)",
 # 2026-09-19：这一跑当场抓到 `log` 契约冲突 —— 模板 update_helper 按 print 形态调用
 # `log("previous update failed:", detail)`，而工具的 log 只收一个参数 ⇒ 只要失败 marker
 # 存在，启动就 TypeError。替身永远测不出来，必须真跑一次。
-from modules.update_helper.update_helper import failed_marker_path  # noqa: E402
-from modules.paths import UPDATE_DIR as _UPDATE_DIR  # noqa: E402
+from template.update_helper.update_helper import failed_marker_path  # noqa: E402
+from template.paths import UPDATE_DIR as _UPDATE_DIR  # noqa: E402
 
 _marker = failed_marker_path(_UPDATE_DIR)
 _marker.parent.mkdir(parents=True, exist_ok=True)

@@ -110,8 +110,8 @@ if exist "%RELEASE_DIR%" (
   exit /b 1
 )
 
-echo [GATE] py_compile src\main.py + src\icons.py + src\modules ...
-"%PY%" -m py_compile src\main.py src\icons.py src\modules\appconfig\appconfig.py src\modules\autostart\autostart.py src\modules\i18n\i18n.py src\modules\update_helper\update_helper.py src\modules\paths\paths.py src\modules\log_kit\log_kit.py src\modules\tray_kit\tray_kit.py
+echo [GATE] py_compile src\main.py + src\icons.py + src\template ...
+"%PY%" -m py_compile src\main.py src\icons.py src\template\appconfig\appconfig.py src\template\autostart\autostart.py src\template\i18n\i18n.py src\template\update_helper\update_helper.py src\template\paths\paths.py src\template\log_kit\log_kit.py src\template\tray_kit\tray_kit.py
 if errorlevel 1 (
   echo [ERROR] compile gate failed.
   if not defined NOPAUSE pause

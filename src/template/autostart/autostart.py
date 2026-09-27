@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/autostart/autostart.py | TEMPLATE-VER: 1.1.3
+# TEMPLATE-FROM: my-diy-tool-template/template/autostart/autostart.py | TEMPLATE-VER: 1.1.4
+# 1.1.4（W1 改名过渡）：模块互引改双式导入（try modules. / except template.）；W1 收尾步统一。
 # 1.1.3（任务 #63）：`migrate_autostart` 的不动条件从「目标存在」收紧为
 #   「**值 == 当前命令行** 且 目标存在」—— **存在性谓词不能代理"当前性"**：
 #   本家族 `release/` 保留历史版本目录（回滚路径），所以"旧版 exe 还在"恒真，
@@ -21,7 +22,10 @@ import re
 import sys
 import winreg
 
-from modules.appconfig import APP_NAME
+try:                                     # W1 改名过渡：旧布局 src/modules/（四仓迁完删 try 分支）
+    from modules.appconfig import APP_NAME
+except ImportError:                      # 新布局 src/template/
+    from template.appconfig import APP_NAME
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
@@ -32,7 +36,10 @@ def get_autostart_cmd(target="stable"):
     if getattr(sys, "frozen", False):
         if target == "runtime":
             return '"%s"' % os.path.abspath(sys.executable)
-        from modules.paths import INSTALL_EXE, is_stable_install
+        try:                             # W1 改名过渡：同文件头注
+            from modules.paths import INSTALL_EXE, is_stable_install
+        except ImportError:
+            from template.paths import INSTALL_EXE, is_stable_install
 
         if is_stable_install() or INSTALL_EXE.exists():
             return '"%s"' % str(INSTALL_EXE)

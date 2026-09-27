@@ -25,8 +25,8 @@ import psutil
 import pystray
 from PIL import Image, ImageDraw, ImageOps
 
-from modules import autostart, i18n, log_kit, paths, tray_kit, update_helper   # noqa: E402
-from modules.appconfig import APP_ID, ICON_ASSET as ICON_ASSET_REL   # noqa: E402
+from template import autostart, i18n, log_kit, paths, tray_kit, update_helper   # noqa: E402
+from template.appconfig import APP_ID, ICON_ASSET as ICON_ASSET_REL   # noqa: E402
 
 
 APP_NAME = "dsh-helper"
@@ -37,7 +37,7 @@ VERSION = "1.8.2"
 # _load_icon_base() 静默走兜底图，而构建与冒烟全绿。
 # 用户数据区/配置/日志/更新暂存同样出自 T2 paths（数据区住 LOCALAPPDATA，
 # 1.6 及以前的 exe 旁旧配置由播种自动迁入）。
-from modules.paths import (APP_DIR, CONFIG_PATH, LEGACY_CONFIG_PATH, LOG_DIR, LOG_PATH,
+from template.paths import (APP_DIR, CONFIG_PATH, LEGACY_CONFIG_PATH, LOG_DIR, LOG_PATH,
                            UPDATE_DIR, USER_DATA_DIR)
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 URL_RE = re.compile(r"https?://(?:127\.0\.0\.1|localhost):([0-9]{1,5})(?:/[^\s]*)?", re.I)
@@ -108,7 +108,7 @@ DEFAULT_CONFIG = {
     "status_refresh_interval_sec": DEFAULT_STATUS_REFRESH_INTERVAL_SEC,
     "start_on_launch": False,
     # 自启状态不落 config（F2-01 单一真源 = HKCU Run）：注册表是唯一出处，
-    # 托盘勾选直接读注册表，见 modules/autostart。
+    # 托盘勾选直接读注册表，见 template/autostart。
     # G4.2 条款 5：退出清理勾选，持久化、默认不勾——不勾 = dsh 服务放行继续运行
     "quit_stop_dsh": False,
 }
@@ -120,7 +120,7 @@ _logger = log_kit.get_logger(LOG_DIR)   # T12：滚动 1MB×3（house 标准 D13
 def log(*parts):
     """模板件的日志契约是 **print 形态**（`log("下载中", name)`），与 log_kit 的单参闭包不同。
 
-    `modules/update_helper` 里有 6 处多参调用；传单参的 log 进去，它们会在**真路径**上
+    `template/update_helper` 里有 6 处多参调用；传单参的 log 进去，它们会在**真路径**上
     TypeError —— 而命中的正是"每次下载"(L407)、"每次成功拉起替换脚本"(L257)、
     "存在失败 marker 时"(L390) 这类必然会走到的行。dsh 的更新链因此从来没跑通过。
     这里按契约收任意个参数再拼接（模板 log_kit 待 tpl-keeper 统一为同一形态）。
@@ -1375,7 +1375,7 @@ def open_config(_icon, _item):
     os.startfile(str(CONFIG_PATH))  # noqa: S606
 
 
-# 自启三件套（含稳定位指向与启动自愈）全部来自 T3 模板件 modules/autostart；
+# 自启三件套（含稳定位指向与启动自愈）全部来自 T3 模板件 template/autostart；
 # main.py 只保留托盘开关的 UI 反馈。F2-01：状态真源 = HKCU Run，不再双写 config。
 
 
@@ -1782,7 +1782,7 @@ def main():
     # dev 态由模板自己跳过（保护 python.exe 无意义）。
     paths.hold_exe_delete_guard(log=log)
     # G4.1 条款 3/5：启动自愈——存量 Run 键指向的 exe 已消失（换版本目录被删）时，
-    # 静默重写到当前正确位置（优先稳定安装位 INSTALL_EXE，见 modules/autostart）。
+    # 静默重写到当前正确位置（优先稳定安装位 INSTALL_EXE，见 template/autostart）。
     autostart.migrate_autostart(log=log)
     # T4 收尾：更新脚本在托盘退出后才跑，要是被打断（重启/被杀/半路消失），那份解压好的
     # 整包（实测 ~50MB/次）就烂在 %TEMP% 里没人知道——启动扫一次。只清一小时前的：

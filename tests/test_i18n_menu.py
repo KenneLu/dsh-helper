@@ -20,8 +20,8 @@ os.environ["DSH_HELPER_DATA_DIR"] = _TMP
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import pystray  # noqa: E402
-from modules import i18n  # noqa: E402
-from modules.paths import CONFIG_PATH  # noqa: E402
+from template import i18n  # noqa: E402
+from template.paths import CONFIG_PATH  # noqa: E402
 import main as M  # noqa: E402
 
 FAILS = []

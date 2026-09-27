@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/modules/i18n/i18n.py | TEMPLATE-VER: 2.2.0
+# TEMPLATE-FROM: my-diy-tool-template/template/i18n/i18n.py | TEMPLATE-VER: 2.2.0
 """T5 · i18n v2 —— 机制与词表分离（数据驱动，蓝本 local-speak2text/i18n.py）。
 
 代码只管机制（回退/格式化/持久化/探测）；词条是**数据**：工具根目录

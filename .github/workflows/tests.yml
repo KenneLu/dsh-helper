@@ -24,7 +24,7 @@ jobs:
           pip install psutil pystray pillow
 
       - name: Compile check
-        run: python -m py_compile src/main.py src/icons.py src/modules/appconfig/appconfig.py src/modules/update_helper/update_helper.py src/modules/paths/paths.py src/modules/log_kit/log_kit.py src/modules/tray_kit/tray_kit.py
+        run: python -m py_compile src/main.py src/icons.py src/template/appconfig/appconfig.py src/template/update_helper/update_helper.py src/template/paths/paths.py src/template/log_kit/log_kit.py src/template/tray_kit/tray_kit.py
 
       - name: Import check (module-level config seed + menu data must not blow up)
         run: python -c "import sys; sys.path.insert(0, 'src'); import main; print('import OK, VERSION =', main.VERSION)"
@@ -55,4 +55,4 @@ jobs:
 
       - name: Update logic check
         run: |
-          python -c "import sys; sys.path.insert(0, 'src'); from modules.update_helper.update_helper import _version_is_newer as v, _tag_to_version as t; assert v('1.8.0','1.7.0'); assert not v('1.7.0','1.7.0'); assert t('v1.8.0')=='1.8.0'; print('update logic OK')"
+          python -c "import sys; sys.path.insert(0, 'src'); from template.update_helper.update_helper import _version_is_newer as v, _tag_to_version as t; assert v('1.8.0','1.7.0'); assert not v('1.7.0','1.7.0'); assert t('v1.8.0')=='1.8.0'; print('update logic OK')"
