@@ -4,6 +4,7 @@
 # VERSION 不在此处：单一事实源在 main.py（build.bat / release.yml findstr 读取，D15）。
 APP_ID = "dsh-helper"
 APP_NAME = "dsh-helper"
+AUTOSTART_KEY = APP_NAME
 REPO_OWNER = "KenneLu"
 REPO_NAME = "dsh-helper"
 EXE_NAME = "dsh-helper.exe"

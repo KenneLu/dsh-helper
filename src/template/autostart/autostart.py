@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/template/autostart/autostart.py | TEMPLATE-VER: 1.1.4
+# TEMPLATE-FROM: my-diy-tool-template/template/autostart/autostart.py | TEMPLATE-VER: 1.2.0
+# 1.2.0（W4，D3 方案 A 落地）：Run 键名**参数化**——`from template.appconfig import
+#   AUTOSTART_KEY`（appconfig 1.0.2 起定义，默认 = APP_NAME）。此前模块硬编码 APP_NAME，
+#   而 reme 的 APP_NAME 是中文展示名、Run 键是 APP_ID（§4.1.54 允许差异）——参数化后
+#   差异全部进 appconfig（参数件），autostart 派发件零分叉，四仓逐字节归一。
+#   l-s2t 的历史键名（APP_NAME="LocalSpeak2Text"，NAME-05 不得改）保持原值。
 # 1.1.4（W1 改名过渡）：模块互引改双式导入（try modules. / except template.）；W1 收尾步统一。
 # 1.1.3（任务 #63）：`migrate_autostart` 的不动条件从「目标存在」收紧为
 #   「**值 == 当前命令行** 且 目标存在」—— **存在性谓词不能代理"当前性"**：
@@ -22,7 +27,7 @@ import re
 import sys
 import winreg
 
-from template.appconfig import APP_NAME
+from template.appconfig import AUTOSTART_KEY
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
@@ -48,7 +53,7 @@ def get_autostart_cmd(target="stable"):
 def is_autostart_enabled():
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_READ) as k:
-            winreg.QueryValueEx(k, APP_NAME)
+            winreg.QueryValueEx(k, AUTOSTART_KEY)
             return True
     except (FileNotFoundError, OSError):
         return False
@@ -57,10 +62,10 @@ def is_autostart_enabled():
 def set_autostart(enabled):
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
         if enabled:
-            winreg.SetValueEx(k, APP_NAME, 0, winreg.REG_SZ, get_autostart_cmd())
+            winreg.SetValueEx(k, AUTOSTART_KEY, 0, winreg.REG_SZ, get_autostart_cmd())
         else:
             try:
-                winreg.DeleteValue(k, APP_NAME)
+                winreg.DeleteValue(k, AUTOSTART_KEY)
             except FileNotFoundError:
                 pass
 
@@ -117,9 +122,9 @@ def migrate_autostart(log=print):
     """
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_READ) as k:
-            value, _ = winreg.QueryValueEx(k, APP_NAME)
+            value, _ = winreg.QueryValueEx(k, AUTOSTART_KEY)
     except FileNotFoundError:
-        log("autostart migrate: %s has no Run entry - not creating one" % APP_NAME)
+        log("autostart migrate: %s has no Run entry - not creating one" % AUTOSTART_KEY)
         return
     except OSError as e:
         log("autostart migrate: cannot read Run entry: %s" % e)
