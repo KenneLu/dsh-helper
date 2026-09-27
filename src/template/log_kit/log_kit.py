@@ -21,10 +21,7 @@
 """
 import os
 
-try:                                     # W1 改名过渡：旧布局 src/modules/（四仓迁完删 try 分支）
-    from modules.appconfig import APP_ID
-except ImportError:                      # 新布局 src/template/
-    from template.appconfig import APP_ID
+from template.appconfig import APP_ID
 
 LOG_MAX_BYTES = 1 << 20      # 1 MB per file
 LOG_BACKUPS = 3              # <app>.log.1 ... .3

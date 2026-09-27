@@ -107,10 +107,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-try:                                     # W1 改名过渡：旧布局 src/modules/（四仓迁完删 try 分支）
-    from modules.appconfig import APP_ID, EXE_NAME, REPO_NAME, REPO_OWNER
-except ImportError:                      # 新布局 src/template/
-    from template.appconfig import APP_ID, EXE_NAME, REPO_NAME, REPO_OWNER
+from template.appconfig import APP_ID, EXE_NAME, REPO_NAME, REPO_OWNER
 
 REPO = f"{REPO_OWNER}/{REPO_NAME}"
 # 检查节流窗口（进程内：见 check_update 的说明——跨进程不生效，别把它当持久化配额保护）

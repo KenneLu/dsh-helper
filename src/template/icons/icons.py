@@ -21,10 +21,7 @@ from pathlib import Path
 
 from PIL import Image
 
-try:                                     # W1 改名过渡：旧布局 src/modules/（四仓迁完删 try 分支）
-    from modules.appconfig import APP_ID, ICON_DRAW, ICON_ASSET
-except ImportError:                      # 新布局 src/template/
-    from template.appconfig import APP_ID, ICON_DRAW, ICON_ASSET
+from template.appconfig import APP_ID, ICON_DRAW, ICON_ASSET
 
 TRAY_SIZES = (16, 24, 32, 48, 64, 256)
 # 100%~200% DPI 下外壳真实索取的像素档（reme-helper 同款清单）

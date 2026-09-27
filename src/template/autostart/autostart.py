@@ -22,10 +22,7 @@ import re
 import sys
 import winreg
 
-try:                                     # W1 改名过渡：旧布局 src/modules/（四仓迁完删 try 分支）
-    from modules.appconfig import APP_NAME
-except ImportError:                      # 新布局 src/template/
-    from template.appconfig import APP_NAME
+from template.appconfig import APP_NAME
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
@@ -36,10 +33,7 @@ def get_autostart_cmd(target="stable"):
     if getattr(sys, "frozen", False):
         if target == "runtime":
             return '"%s"' % os.path.abspath(sys.executable)
-        try:                             # W1 改名过渡：同文件头注
-            from modules.paths import INSTALL_EXE, is_stable_install
-        except ImportError:
-            from template.paths import INSTALL_EXE, is_stable_install
+        from template.paths import INSTALL_EXE, is_stable_install
 
         if is_stable_install() or INSTALL_EXE.exists():
             return '"%s"' % str(INSTALL_EXE)

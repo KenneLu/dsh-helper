@@ -22,10 +22,7 @@ import shutil
 import sys
 from pathlib import Path
 
-try:                                     # W1 改名过渡：旧布局 src/modules/（四仓迁完删 try 分支）
-    from modules.appconfig import APP_ID
-except ImportError:                      # 新布局 src/template/
-    from template.appconfig import APP_ID
+from template.appconfig import APP_ID
 
 if getattr(sys, "frozen", False):
     APP_DIR = Path(sys.executable).resolve().parent
