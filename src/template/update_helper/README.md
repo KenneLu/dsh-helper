@@ -1,6 +1,6 @@
 # T4 · update_helper —— 在线更新三段式（查 → 下 → 换）
 
-> 规范出处：STANDARDS.md §G4/G4.1、§H 发布链规范 6（zip 约定）、§B4（**公共件冲突以
+> 规范出处：家族规范.md §G4/G4.1、§H 发布链规范 6（zip 约定）、§B4（**公共件冲突以
 > reme-helper 的已验证实现为基准**）。
 > 基准实现：reme-helper 的查-下-换链路（`src/main.py` 7098-7345，真实发过版、跑过替换）；
 > 另参考 local-speak2text/updater.py（稳定位形态）与 dsh/opencodex（运行目录形态）。

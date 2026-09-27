@@ -2,7 +2,7 @@
 # TEMPLATE-FROM: my-diy-tool-template/template/service_link/service_link.py | TEMPLATE-VER: 0.1.0
 """服务接入与唯一性（helper ↔ 服务 的所有权模型）。
 
-规范出处：STANDARDS.md §G4.2。四条铁律：
+规范出处：家族规范.md §G4.2。四条铁律：
   唯一性   —— helper 的"启动"只在探测不到服务时允许执行；探测到即拒绝。
   外部自由 —— helper 之外手动多开服务实例属于业务自由，不阻止、不清理、不刷屏。
   接入     —— 以规范端点的实际应答者为唯一接入对象；接入 pid 登记后固定不漂移。

@@ -1,6 +1,6 @@
 # T12 · log_kit —— 滚动日志 + 打开日志目录
 
-> 规范出处：STANDARDS.md §D4（D13：参数统一 1MB×3）；执行文档 F12。
+> 规范出处：家族规范.md §D4（D13：参数统一 1MB×3）；执行文档 F12。
 > 蓝本：reme-helper 的 RotatingFileHandler 方案（实测 ~4MB 封顶）。
 
 ## 定位

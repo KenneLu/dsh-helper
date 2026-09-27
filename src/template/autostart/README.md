@@ -1,6 +1,6 @@
 # T3 · autostart —— 开机自启三件套
 
-> 规范出处：STANDARDS.md §G4.1（规范原文认定 local-speak2text 形态"比 reme-helper 更进一步"）。
+> 规范出处：家族规范.md §G4.1（规范原文认定 local-speak2text 形态"比 reme-helper 更进一步"）。
 > 蓝本：local-speak2text/main.py 自启段。
 
 ## 定位

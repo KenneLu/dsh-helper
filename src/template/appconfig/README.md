@@ -1,6 +1,6 @@
 # T1 · appconfig —— 参数区（拷贝后唯一要改的文件）
 
-> 规范出处：STANDARDS.md §F2「单一真源」、执行文档 D6/D15。
+> 规范出处：家族规范.md §F2「单一真源」、执行文档 D6/D15。
 > 蓝本：reme-helper 的常量区 + local-speak2text/paths.py 的字段集。
 
 ## 定位
