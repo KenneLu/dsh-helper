@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/template/autostart/autostart.py | TEMPLATE-VER: 1.2.0
+# TEMPLATE-FROM: my-diy-tool-template/template/autostart/autostart.py | TEMPLATE-VER: 1.2.1
+# 1.2.1（W4 实测事故修复）：migrate_autostart 加 **frozen 守卫**——dev 态（python 直跑）
+#   绝不自动重写 Run 键。事故链：reme 接入 1.2.0 后，其测试（argv[0]=tests/test_x.py）
+#   走到启动路径的 migrate，把用户真实 Run 键改写成指向**测试脚本**（C-40 当场抓获）。
+#   reme 旧内联版早有此守卫（"从源码跑时 sys.executable 是 python.exe，实测踩过一次"）——
+#   本次反向沉淀。set_autostart 不受影响（用户显式操作 dev 自启仍写 pythonw+script，
+#   那是 l-s2t 蓝本设计）；只是**自动自愈**限定打包态。
 # 1.2.0（W4，D3 方案 A 落地）：Run 键名**参数化**——`from template.appconfig import
 #   AUTOSTART_KEY`（appconfig 1.0.2 起定义，默认 = APP_NAME）。此前模块硬编码 APP_NAME，
 #   而 reme 的 APP_NAME 是中文展示名、Run 键是 APP_ID（§4.1.54 允许差异）——参数化后
@@ -119,7 +125,16 @@ def migrate_autostart(log=print):
        `value != wanted and not os.path.exists(...)`，`value == wanted` 会**短路**
        —— 注册值恰好等于会写进去的值、而目标已不在时不做任何事。现在去掉这一半；
        重写后**复查**新目标，仍不存在就如实报告，不谎报 `migrated`。
+    3. **dev 态绝不自动重写**（1.2.1，W4 实测事故）：非 frozen 运行（python 直跑源码、
+       或测试进程）的 `get_autostart_cmd()` 是 `pythonw + sys.argv[0]`——argv[0] 是
+       **这次恰好被运行的那个脚本**。migrate 若在 dev 态重写，任何走到启动路径的脚本
+       （含 tests/test_x.py）都会把用户真实 Run 键抢写成指向自己。事故实录：reme 接入
+       1.2.0 首轮测试即把 Run[reme-helper] 改成指向 test_delete_guard_wired.py
+       （C-40 当场抓获）。⇒ 自动自愈限定打包态；dev 态只读只记，不碰注册表。
     """
+    if not getattr(sys, "frozen", False):
+        log("autostart migrate: dev run (not frozen) - registry untouched")
+        return
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_READ) as k:
             value, _ = winreg.QueryValueEx(k, AUTOSTART_KEY)
