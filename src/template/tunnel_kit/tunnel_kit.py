@@ -2,9 +2,11 @@
 # TEMPLATE-FROM: my-diy-tool-template/template/tunnel_kit/tunnel_kit.py | TEMPLATE-VER: 0.1.1
 # 0.1.1（W7 §4 随 reme 接入）：build_reverse_args 加 remote_bind 可选——远端只听
 #   127.0.0.1 的收紧形态（reme 既有语义，模板化收编）。
-# 1.0.0（W7，Decision 10/14）：统一 ssh 隧道模块——以 opencodex-helper 现有件为底抽象。
+# 0.1.0（W7，Decision 10/14）：统一 ssh 隧道模块——以 opencodex-helper 现有件为底抽象。
 #   术语裁定（用户）：一律「ssh 目标」，不用「VM 目标」。
-"""T8｜ssh 反向隧道统一件（W7）：启动/探测/自愈/有界停止。
+#   （F-R5 笔误修正：本条原误写 1.0.0；T8 编号系误占——build_release 为 T8+T9，
+#   模块 T 号已满，本模块无 T 号，同 service_link 先例。）
+"""ssh 反向隧道统一件（W7）：启动/探测/自愈/有界停止。
 
 蓝本：opencodex-helper 已验证的隧道段（幂等 start_target / probe_target /
 OWNED 句柄唯一认领），吸收 reme 的服务编排语义（service_link.on_ready 衔接）。

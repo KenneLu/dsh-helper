@@ -1,6 +1,7 @@
-# tunnel_kit — ssh 反向隧道统一件（T8，0.1.0，W7）
+# tunnel_kit — ssh 反向隧道统一件（0.1.1，W7）
 
 蓝本：opencodex-helper 已验证隧道段；术语裁定（用户）：一律「**ssh 目标**」。
+（编号口径 F-R5：无 T 编号——T8 属 build_release，模块 T 号 T1–T12 已满，同 service_link 无号先例。）
 
 ## API
 
@@ -26,3 +27,13 @@
 
 `confirm_n=3`（连续失败确认）、`backoff_start_s=30 → backoff_max_s=600`、
 `ServerAliveInterval=30 / ServerAliveCountMax=3`、`ExitOnForwardFailure=yes`。
+
+## 最低消费口径：「退避翻倍」腿（F-R4，W8-A 登记）
+
+指数退避的**翻倍腿只活在 `TunnelTarget.ensure()`**（`backoff_s` 每次失败重连后 ×2、
+封顶 `backoff_max_s`、重连成功即复位到起始值）。**消费方若只取
+`build_reverse_args`/`DEFAULTS` 而不用 `TunnelTarget`，翻倍腿不生效**——当前
+ocx（自愈循环按 `DEFAULTS["backoff_start_s"]` 固定 30s 重试）/ reme（自持续命监控）
+均为此形态，**登记为已知休眠**。最低消费要求：自建监控循环的消费方必须自行实现
+「30s 起步 → 每次失败 ×2 → 600s 封顶 → 成功复位」的完整序列（或迁移到
+`TunnelTarget`）；只取起始值不翻倍 = 未达 D10 口径。迁移窗口随 W8+ 排期。
