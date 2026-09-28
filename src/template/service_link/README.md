@@ -79,3 +79,9 @@ OWNED ──进程已消失──▶ NONE（自然收敛）
 **必须**把主程序的 STOP_EVENT 传给 `abort_event`：退出路径上等待必须比超时先断，
 否则用户看着托盘"卡住关不掉"。abort 只中断等待、不杀进程——退出链路本就整链收尾，
 服务归属 OWNED/ADOPTED 由既有 stop 语义处理。
+
+**适用边界（豁免条款）**：上条"必须"只约束**持有 STOP_EVENT、存在退出等待**的工具——
+无 STOP_EVENT 的 daemon-boot 编排（启动即交付、无常驻退出路径，如 boot 期一次性
+`ensure_running`）**不适用**本规约：`abort_event` 可不传（默认 `None`），等待上界由
+`timeout` 自身兜底；豁免只免"装配义务"，abort 语义本身不变（仍只断等待、不动进程，
+已 launch 的留 OWNED 由调用方处置）。
