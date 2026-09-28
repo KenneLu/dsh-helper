@@ -25,7 +25,7 @@ import psutil
 import pystray
 from PIL import Image, ImageDraw, ImageOps
 
-from template import autostart, i18n, log_kit, paths, tray_kit, update_helper   # noqa: E402
+from template import autostart, i18n, log_kit, paths, tray_icons, tray_kit, update_helper   # noqa: E402
 from template.appconfig import APP_ID, ICON_ASSET as ICON_ASSET_REL   # noqa: E402
 
 
@@ -980,7 +980,7 @@ def rebuild_menu():
     icon = TRAY_ICON
     if icon is None:
         return
-    icon.icon = make_icon_image(state_copy().get("phase") == "running")
+    tray_icons.tray_icons.set_state("running" if state_copy().get("phase") == "running" else "stopped")
     icon.menu = build_menu()
     icon.update_menu()
 
@@ -1515,78 +1515,6 @@ def monitor_loop():
             log(f"monitor failed: {exc}")
 
 
-def _load_icon_base():
-    global _ICON_BASE
-    if _ICON_BASE is not None:
-        return _ICON_BASE.copy()
-    try:
-        source = _remove_baked_background(Image.open(ICON_ASSET).convert("RGBA"))
-        alpha = source.getchannel("A")
-        # 生成图边缘可能残留 alpha=1 的孤立像素；忽略这些像素后再裁剪，
-        # 避免透明边缘把托盘图标的有效内容压小。
-        trim_alpha = alpha.point(lambda value: 255 if value > 8 else 0)
-        bbox = trim_alpha.getbbox()
-        if bbox:
-            source = source.crop(bbox)
-        source.thumbnail((60, 60), Image.Resampling.LANCZOS)
-        canvas = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
-        canvas.alpha_composite(source, ((64 - source.width) // 2, (64 - source.height) // 2))
-        _ICON_BASE = canvas
-    except Exception as exc:
-        log(f"icon asset load failed: {exc}")
-        # 资源缺失时保留一个可识别的简易兜底图，避免托盘工具无法启动。
-        canvas = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(canvas)
-        draw.ellipse((5, 16, 52, 48), fill=(18, 72, 145))
-        draw.polygon([(45, 25), (61, 12), (55, 32), (61, 52), (45, 39)], fill=(18, 72, 145))
-        draw.ellipse((43, 12, 60, 29), fill=(0, 151, 167))
-        draw.ellipse((48, 16, 56, 24), fill=(255, 213, 0))
-        _ICON_BASE = canvas
-    return _ICON_BASE.copy()
-
-
-def _remove_baked_background(image):
-    """把生成图里误绘制的灰白棋盘格清成真正的透明背景。"""
-    alpha = image.getchannel("A")
-    if alpha.getextrema() == (0, 0):
-        return image
-    corners = [(0, 0), (image.width - 1, 0), (0, image.height - 1), (image.width - 1, image.height - 1)]
-    for point in corners:
-        r, g, b, a = image.getpixel(point)
-        neutral = max(r, g, b) - min(r, g, b) <= 22
-        light_background = min(r, g, b) >= 180
-        dark_background = max(r, g, b) <= 28
-        if a and neutral and (light_background or dark_background):
-            ImageDraw.floodfill(image, point, (0, 0, 0, 0), thresh=48)
-    return image
-
-
-def _brighten_beacon(image):
-    """运行态只做轻微提亮，保留图标资源本身的暖金色。"""
-    pixels = image.load()
-    for y in range(image.height):
-        for x in range(image.width):
-            r, g, b, a = pixels[x, y]
-            if a and r >= 150 and g >= 100 and b <= 135 and r >= b + 80 and g >= b + 45:
-                pixels[x, y] = (
-                    min(255, int(r * 1.01 + 1)),
-                    min(255, int(g * 1.04 + 4)),
-                    max(0, int(b * 0.90)),
-                    a,
-                )
-    return image
-
-
-def make_icon_image(running):
-    base = _load_icon_base()
-    if running:
-        return _brighten_beacon(base)
-    gray = ImageOps.grayscale(base.convert("RGB"))
-    gray = ImageOps.colorize(gray, black=(82, 82, 82), white=(205, 205, 205)).convert("RGBA")
-    gray.putalpha(base.getchannel("A"))
-    return gray
-
-
 # 更新状态由**工具自持**，不读模板模块的可变全局：模板包曾用 `from .x import *`
 # 把 PENDING_CMD 拷成静态副本，工具读到恒 None → apply.cmd 永不拉起；UPDATE_READY
 # 也曾恒 None → "下载并更新"恒灰。稳定契约是**函数返回值**：
@@ -1802,12 +1730,14 @@ def main():
     )
     save_config()
     refresh_state()
+    tray_icons.tray_icons.init()
     TRAY_ICON = pystray.Icon(
         "dsh-helper",
-        icon=make_icon_image(state_copy().get("phase") == "running"),
+        icon=tray_icons.tray_icons.get("stopped"),
         title=APP_NAME,
         menu=build_menu(),
     )
+    tray_icons.tray_icons.bind(TRAY_ICON, "stopped")
     threading.Thread(target=monitor_loop, name="dsh-monitor", daemon=True).start()
     # E2-09 第②拍：菜单开着时被推迟的重画在这里补上（状态刷新间隔最长 600s，不能靠它）。
     threading.Thread(target=menu_refresh_loop, name="dsh-menu-refresh", daemon=True).start()
