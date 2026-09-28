@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/template/tunnel_kit/tunnel_kit.py | TEMPLATE-VER: 0.1.0
+# TEMPLATE-FROM: my-diy-tool-template/template/tunnel_kit/tunnel_kit.py | TEMPLATE-VER: 0.1.1
+# 0.1.1（W7 §4 随 reme 接入）：build_reverse_args 加 remote_bind 可选——远端只听
+#   127.0.0.1 的收紧形态（reme 既有语义，模板化收编）。
 # 1.0.0（W7，Decision 10/14）：统一 ssh 隧道模块——以 opencodex-helper 现有件为底抽象。
 #   术语裁定（用户）：一律「ssh 目标」，不用「VM 目标」。
 """T8｜ssh 反向隧道统一件（W7）：启动/探测/自愈/有界停止。
@@ -48,22 +50,27 @@ STATE_OWNED = "owned"
 STATE_ADOPTED = "adopted"
 
 
-def build_reverse_args(target, *, alive=None):
+def build_reverse_args(target, *, alive=None, remote_bind=None):
     """构造反向隧道命令行参数段（纯函数）。
 
     target: {"host": "user@host", "port": 22, "remote_port": 10100,
              "local_host": "127.0.0.1", "local_port": 10100}
     alive: DEFAULTS 的子集（Decision 10 参数；None 用默认）。
+    remote_bind: 远端监听绑定地址（None=远端全听；"127.0.0.1"=只在远端本机听——
+                 reme 形态，更收紧）。
     返回 list[str]（不含 ssh 可执行路径——密钥/密码型的可执行与认证段由消费方拼）。
     """
     a = dict(DEFAULTS, **(alive or {}))
+    fwd = f"{target['remote_port']}:{target.get('local_host', '127.0.0.1')}:{target['local_port']}"
+    if remote_bind:
+        fwd = f"{remote_bind}:{fwd}"
     return [
         "-N",
         "-o", f"ServerAliveInterval={a['server_alive_interval']}",
         "-o", f"ServerAliveCountMax={a['server_alive_count_max']}",
         "-o", "ExitOnForwardFailure=yes",
         "-p", str(target.get("port", 22)),
-        "-R", f"{target['remote_port']}:{target.get('local_host', '127.0.0.1')}:{target['local_port']}",
+        "-R", fwd,
         target["host"],
     ]
 
