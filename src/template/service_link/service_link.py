@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/template/service_link/service_link.py | TEMPLATE-VER: 0.1.0
+# TEMPLATE-FROM: my-diy-tool-template/template/service_link/service_link.py | TEMPLATE-VER: 0.2.0
+# 0.2.0（W7 §1）：**启动编排三件 + 就绪钩子**——①STARTING 态（NONE→STARTING→OWNED，
+#   launch 抛异常回滚 NONE——旧版 launch 失败会卡在半启动态）；②wait_ready(timeout,
+#   abort_event)（对齐 reme wait_for_health：STOP_EVENT 立断、健康轮询、超时如实报）；
+#   ③ensure_running()（probe 命中→ADOPTED 收养；否则 start+wait_ready——「服务就绪后
+#   起隧道」的编排入口）；④on_ready 回调（wait_ready 成功即调，衔接 tunnel_kit）。
+#   README 补 abort_event 装配规约（shutdown 竞态，reme main.py:2826-2828 教训）。
 """服务接入与唯一性（helper ↔ 服务 的所有权模型）。
 
 规范出处：家族规范.md §G4.2。四条铁律：
@@ -11,7 +17,9 @@
 
 状态机（自然收敛，无外力不迁移）：
   NONE ──探测到服务──▶ ADOPTED ──stop──▶ NONE
-  NONE ──start──────▶ OWNED  ──stop──▶ NONE
+  NONE ──start──────▶ STARTING ──launch 成功──▶ OWNED ──stop──▶ NONE
+                        │                          
+                        └─launch 抛异常──▶ NONE（回滚，不留半启动态）
   OWNED ──进程消失──▶ NONE（自己起的死了，状态回零）
   ADOPTED 存续期间出现的新实例：登记为旁观者（spectators），不清理。
 
@@ -21,8 +29,9 @@
 
 # 状态常量
 STATE_NONE = "none"        # 未发现服务
+STATE_STARTING = "starting"  # launch 已发、就绪未确认（0.2.0）：wait_ready 的窗口态
 STATE_ADOPTED = "adopted"  # 识别接入：服务不是本 helper 启动的
-STATE_OWNED = "owned"      # 本 helper 启动并持有句柄
+STATE_OWNED = "owned"      # 本 helper 启动并持有句柄（就绪已确认或调用方不等就绪）
 
 
 class ServiceLink:
@@ -79,13 +88,83 @@ class ServiceLink:
         return self.state == STATE_NONE
 
     def start(self):
-        """唯一性守卫下的启动。返回 (ok, msg)。非 NONE 态一律拒绝。"""
+        """唯一性守卫下的启动。返回 (ok, msg)。非 NONE 态一律拒绝。
+
+        0.2.0：先入 STARTING 再 launch——launch 抛异常时回滚 NONE（旧版直接把
+        异常抛给调用方、状态已不在 NONE，后续 start 会被"already running"拒绝，
+        一个启动失败的服务把状态机卡死）。成功即 OWNED；要不要等就绪由调用方
+        决定（wait_ready / ensure_running）。
+        """
         if self.state != STATE_NONE:
             self.log("start refused: service already running")
             return False, "service already running"
-        self.handle = self.launch()
+        self.state = STATE_STARTING
+        try:
+            self.handle = self.launch()
+        except Exception as exc:
+            self.state, self.handle = STATE_NONE, None
+            self.log(f"launch failed, rolled back to none: {exc}")
+            return False, f"launch failed: {exc}"
         self.state = STATE_OWNED
         return True, "started"
+
+    def wait_ready(self, timeout, abort_event=None, interval=0.5):
+        """轮询 probe 至健康。返回 (ok, msg)。
+
+        对齐 reme wait_for_health 语义：
+          * abort_event 一旦置位**立即**返回（False, "aborted"）——shutdown 竞态下
+            退出必须比超时快（reme main.py:2826-2828 教训：等满超时才退会让用户
+            看着托盘"卡住关不掉"）。abort 只中断等待，**不动进程**——已 launch 的
+            服务留在 OWNED，由调用方决定 stop 与否（退出路径本来就整链收）。
+          * 超时如实报（False, "timeout after Ns"），同样不动进程。
+          * interval 是轮询间隔；probe 异常按不健康处理（fail-open 不适用这里：
+            等待侧保守即多等一轮，refresh 侧的 fail-open 语义不受影响）。
+        """
+        import time as _time
+        deadline = _time.monotonic() + max(0.0, timeout)
+        while True:
+            if abort_event is not None and abort_event.is_set():
+                return False, "aborted"
+            try:
+                if self.probe():
+                    self._fire_on_ready()
+                    return True, "ready"
+            except Exception as exc:
+                self.log(f"probe error during wait_ready (treated as not ready): {exc}")
+            if _time.monotonic() >= deadline:
+                return False, f"timeout after {timeout}s"
+            _time.sleep(min(interval, max(0.0, deadline - _time.monotonic())))
+
+    def ensure_running(self, timeout=60.0, abort_event=None, interval=0.5):
+        """服务确保在跑：probe 命中→收养（ADOPTED）；否则启动并等就绪。
+
+        「启动工具→拉服务→就绪后起隧道」的编排入口（W7）：一次调用完成
+        adopt-or-start + ready 确认，on_ready 回调在就绪瞬间触发。
+        """
+        state, healthy = self.refresh()
+        if healthy:
+            self._fire_on_ready()
+            return True, f"adopted (state={state})"
+        ok, msg = self.start()
+        if not ok:
+            return False, msg
+        return self.wait_ready(timeout, abort_event=abort_event, interval=interval)
+
+    def on_ready(self, callback):
+        """注册就绪回调（wait_ready/ensure_running 探测成功的瞬间调用，异常不外抛）。
+
+        典型用途：服务就绪后逐 ssh 目标 ensure 隧道（tunnel_kit 衔接点）。
+        """
+        self._on_ready_cb = callback
+
+    def _fire_on_ready(self):
+        cb = getattr(self, "_on_ready_cb", None)
+        if cb is None:
+            return
+        try:
+            cb()
+        except Exception as exc:  # noqa: BLE001 - 编排回调失败不该打断就绪判定
+            self.log(f"on_ready callback failed: {exc}")
 
     # ---------- 有界清理 ----------
 
