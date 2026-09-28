@@ -23,6 +23,7 @@
 | `quit_watch_loop(stop_event, path, on_quit, beat=1.0)` | 1s 拍监视请求文件，发现即删并回调 `on_quit`（走与托盘退出同一条清理路径） |
 | `mask_token(url, keep="••••••")` | D11：展示面 token 全掩码；完整地址唯一入口 = 复制项 |
 | `MenuSignature(rebuild, menu_is_open, log=…)` | 签名重画：`.update(sig)` 签名变了才重建菜单、菜单开着推迟；`.flush_deferred()` 给 1.5s 补画拍调用 |
+| **`menu_is_open()`** | **MenuSignature 的配套探测器**（2.3.0 下沉，Decision 9）：GUI_INMENUMODE 遍历本进程线程 + 前台窗口 #32768 兜底；探测失败当没开着。此前四工具各内联约 40 行近乎逐行重复，现直接传 `menu_is_open=tray_kit.menu_is_open` |
 | **`log=` 的形态（稳定承诺）** | 本模块只按**单参**形态调用（`log(f"...")`），但**收 `log=` 的三个模板件（tray_kit / update_helper / log_kit）对外统一为 print 形态**——接受任意个位置参数。理由：调用形态必须**家族一致**，否则"哪个模块要哪种 log"变成口口相传的暗规则（C-29） |
 
 ## 三循环骨架（reme-helper 蓝本，组装规范）
@@ -48,7 +49,7 @@
 
 1. 拷 `tray_kit.py`（零依赖，纯标准库）；
 2. `main()` 最早处 `acquire_single_instance()` → False 则 `warn_duplicate_instance()` 退出；
-3. 菜单重建走 `MenuSignature`；管理 Web 面板的工具用 `mask_token` + 「复制面板地址」紧贴地址行；
+3. 菜单重建走 `MenuSignature(rebuild, menu_is_open=tray_kit.menu_is_open)`（探测器已配套下沉，勿再内联）；管理 Web 面板的工具用 `mask_token` + 「复制面板地址」紧贴地址行；
 4. 需要 `--quit` 的工具：`quit_watch_loop` + 独立数据区（T2）。
 
 ## 边界与坑

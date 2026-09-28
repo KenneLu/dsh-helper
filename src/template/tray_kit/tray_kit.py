@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/template/tray_kit/tray_kit.py | TEMPLATE-VER: 2.2.1
-"""T7｜托盘机制件：单实例互斥体、退出请求文件 + 监视循环、面板地址行掩码、菜单签名重画、退出确认框（2.0.0）。
+# TEMPLATE-FROM: my-diy-tool-template/template/tray_kit/tray_kit.py | TEMPLATE-VER: 2.3.0
+"""T7｜托盘机制件：单实例互斥体、退出请求文件 + 监视循环、面板地址行掩码、菜单签名重画（含 menu_is_open 探测器）、退出确认框（2.0.0）。
+
+2.3.0（W7 Decision 9）：**menu_is_open 下沉**——MenuSignature 的配套探测器
+（GUI_INMENUMODE 遍历本进程线程 + 前台窗口 #32768 兜底）此前在四工具各内联
+约 40 行、近乎逐行重复，正本化进模板。调用方改为
+`MenuSignature(rebuild, menu_is_open=tray_kit.menu_is_open, …)`，各删约 40 行。
 
 2.2.0：**合法性判据单一化**——新增 `mutex_name_ok(name)`（纯字符串判定：非空字符串、
 以 Local 命名空间前缀起头、前缀之后不得再出现反斜杠），**守卫与探针共用同一段**
@@ -274,10 +279,61 @@ def mask_token(url, keep="••••••"):
     return re.sub(r"([?&])token=[^&]*", lambda m: m.group(1) + "token=" + keep, url)
 
 
+_GUI_INMENUMODE = 0x00000004
+
+
+def menu_is_open():
+    """系统弹出菜单是否正开着（MenuSignature 的配套探测器，2.3.0 下沉）。
+
+    菜单开着时重建菜单会把它销毁重造（pystray 的 update_menu 是
+    DestroyMenu + CreatePopupMenu），表现就是"右键菜单滑着滑着突然失焦"——
+    MenuSignature 据此推迟重建，本函数就是那个"先问一句"。
+
+    探测：菜单模态标记 GUI_INMENUMODE 挂在**调用 TrackPopupMenu 的那个线程**上
+    （托盘窗口不会因此变成前台窗口，实测过），所以遍历本进程线程去问；再以
+    「前台窗口是系统菜单类 #32768」兜底。探测失败当没开着（宁可多重建一次，
+    也不能因为探测失败就永远不重建）。
+    """
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class GUITHREADINFO(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.DWORD), ("flags", wintypes.DWORD),
+                        ("hwndActive", wintypes.HWND), ("hwndFocus", wintypes.HWND),
+                        ("hwndCapture", wintypes.HWND), ("hwndMenuOwner", wintypes.HWND),
+                        ("hwndMoveSize", wintypes.HWND), ("hwndCaret", wintypes.HWND),
+                        ("rcCaret", wintypes.RECT)]
+
+        user32 = ctypes.windll.user32
+        for thread in threading.enumerate():
+            tid = getattr(thread, "native_id", None)
+            if not tid:
+                continue
+            info = GUITHREADINFO()
+            info.cbSize = ctypes.sizeof(GUITHREADINFO)
+            if not user32.GetGUIThreadInfo(int(tid), ctypes.byref(info)):
+                continue
+            if info.flags & _GUI_INMENUMODE:
+                return True
+        hwnd = user32.GetForegroundWindow()
+        if hwnd:
+            name = ctypes.create_unicode_buffer(32)
+            user32.GetClassNameW(hwnd, name, 32)
+            if name.value == "#32768":
+                return True
+        return False
+    except Exception:
+        return False
+
+
 class MenuSignature:
     """签名重画：把「会显示出来的状态」提成一个 tuple，只有签名变了才重建菜单句柄，
     菜单开着时推迟（menu_is_open 回调返回 True 时），根治右键菜单开着突然失焦。
-    用法：每拍把各项状态喂给 signature()；与上次不同且菜单未开时调 rebuild()。"""
+    用法：每拍把各项状态喂给 signature()；与上次不同且菜单未开时调 rebuild()。
+    menu_is_open 回调直接用本模块的 `menu_is_open()`（2.3.0 起配套下沉，勿再内联）。"""
 
     def __init__(self, rebuild, menu_is_open=lambda: False, log=print):
         self.rebuild = rebuild
