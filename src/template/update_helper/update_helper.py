@@ -1,5 +1,13 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/template/update_helper/update_helper.py | TEMPLATE-VER: 1.4.6
+# TEMPLATE-FROM: my-diy-tool-template/template/update_helper/update_helper.py | TEMPLATE-VER: 1.5.0
+# 1.5.0（W5 前段，D4 方案 B）：**吸收 reme 的两条失败可见性语义**（F14-①②）——
+#   ①`:giveup` 超时**写 FAILED marker**（此前只写日志：bat 在应用退出后运行，
+#   "只写日志"等于"用户永远不知道更新没发生"；日志随暂存目录被清扫，marker
+#   落在用户数据区、下次启动 pop_failed_update_note 转人话）；
+#   ②`:install_dead` **写 marker + 按实况报告**（KEPT 只列真实存在的
+#   SNAPSHOT/BACKUP；旧措辞恒说 "snapshot kept at %SNAPSHOT%"，在快照已轮转成
+#   BACKUP 的路径上指向不存在的路径——把用户引向一条死路）。
+#   语义源：reme-helper 已验证更新链（main.py:7242-7282），基准角色随本版移交模板。
 # 1.4.6（W1 改名过渡）：模块互引改双式导入（try modules. / except template.），
 #   兼容工具侧 src/modules/（未迁移）与 src/template/（已迁移）两种布局；W1 收尾步统一为 template.。
 # 1.4.5（任务 #32/T4）：**接口扩展，让"更新源运行时可配"能迁到模板**——
@@ -265,14 +273,29 @@ echo [{stamp}] restored - starting previous version >> "%LOG%"
 start "" "{newexe}"
 goto cleanup_keep
 :install_dead
-echo [{stamp}] RESTORE FAILED - not starting; snapshot kept at %SNAPSHOT% >> "%LOG%"
+rem Last resort: the install dir is unusable and the rollback copy could not be restored.
+rem Start nothing (a missing exe would open an undismissable modal box); leave the
+rem marker so the next manual launch can tell the user what happened.
+rem The report names only the copies that are REALLY there - the old wording always said
+rem "snapshot kept at %SNAPSHOT%" even on paths where the snapshot had already been
+rem rotated to %BACKUP%, i.e. it pointed the user at a path that did not exist.
+set "KEPT="
+if exist "%SNAPSHOT%" set "KEPT=%SNAPSHOT%"
+if exist "%BACKUP%" set "KEPT=%KEPT% %BACKUP%"
+if not defined KEPT set "KEPT=(none - the install dir itself is all that is left)"
+echo [{stamp}] RESTORE FAILED - not starting; rollback copies kept at %KEPT% >> "%LOG%"
+> "%FAILED%" echo update failed {stamp}: restore failed, no exe started; kept %KEPT%
 goto cleanup_keep
 :giveup
-rem Report the poll count and the per-tick sleep, not a fake "seconds" figure: the
-rem real elapsed time is >= {limit} x {tick_ms}ms because every tick also pays a
-rem PowerShell startup. The old wording said "after 120s" while it had actually
-rem been waiting ~18 minutes - a log that lies is worse than no log.
+rem Wait limit hit: the old process never exited. Do not replace anything.
+rem Report the MEASURED semantics: polls x ms per tick, plus the nominal budget as a
+rem LOWER BOUND. Wall-clock is strictly larger (PowerShell startup per tick), so printing
+rem a plain "Ns" here would be the exact lie C-33 exists to stop.
+rem The FAILED marker is the ONLY channel that survives this process: the bat runs after
+rem the app has exited, so "write it in the log only" equals "the user never learns the
+rem update did not happen" (1.5.0, F14-1: reme semantics absorbed).
 echo [{stamp}] aborted: {exe} still running after %tries% polls x {tick_ms}ms (nominal budget {budget_s}s, lower bound) >> "%LOG%"
+> "%FAILED%" echo update aborted {stamp}: {exe} still running after %tries% polls x {tick_ms}ms (nominal budget {budget_s}s, lower bound)
 goto cleanup
 :cleanup
 rem Runs on the success path: without it the staged package (~50MB/update) stays behind
