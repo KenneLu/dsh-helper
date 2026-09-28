@@ -1,0 +1,10 @@
+# W6 (F-R1 根治, PM 裁定): Edit/write 工具天然产 LF——统一文本规范到 LF，
+# git 入库自动规范化，工具倾向从此"默认正确"。二进制显式排除。
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.exe binary
+*.zip binary
+*.wav binary
+*.bat text eol=crlf
+*.cmd text eol=crlf
