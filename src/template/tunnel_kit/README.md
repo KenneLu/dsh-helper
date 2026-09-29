@@ -28,12 +28,20 @@
 `confirm_n=3`（连续失败确认）、`backoff_start_s=30 → backoff_max_s=600`、
 `ServerAliveInterval=30 / ServerAliveCountMax=3`、`ExitOnForwardFailure=yes`。
 
-## 最低消费口径：「退避翻倍」腿（F-R4，W8-A 登记）
+## 最低消费口径：「退避翻倍」腿（F-R4，W8-A 登记；W8-C 更新）
 
 指数退避的**翻倍腿只活在 `TunnelTarget.ensure()`**（`backoff_s` 每次失败重连后 ×2、
 封顶 `backoff_max_s`、重连成功即复位到起始值）。**消费方若只取
-`build_reverse_args`/`DEFAULTS` 而不用 `TunnelTarget`，翻倍腿不生效**——当前
-ocx（自愈循环按 `DEFAULTS["backoff_start_s"]` 固定 30s 重试）/ reme（自持续命监控）
-均为此形态，**登记为已知休眠**。最低消费要求：自建监控循环的消费方必须自行实现
-「30s 起步 → 每次失败 ×2 → 600s 封顶 → 成功复位」的完整序列（或迁移到
-`TunnelTarget`）；只取起始值不翻倍 = 未达 D10 口径。迁移窗口随 W8+ 排期。
+`build_reverse_args`/`DEFAULTS` 而不用 `TunnelTarget`，翻倍腿不生效**。休眠名单
+更新（09-29）：**ocx 已在自建循环实现完整序列（N1 修复：30s 起步→失败 ×2→600s
+封顶→成功/探测恢复复位）**；**reme 仍为休眠形态**（自持续命监控无翻倍，N2 降级
+留痕——升级迁移 `TunnelTarget` 随 10-01 排期）。最低消费要求：自建监控循环的
+消费方必须自行实现「30s 起步 → 每次失败 ×2 → 600s 封顶 → 成功复位」的完整序列
+（或迁移到 `TunnelTarget`）；只取起始值不翻倍 = 未达 D10 口径。
+
+## probe 异常方向（#45，N3 于 0.1.2 对齐）
+
+`alive()` 的 probe 回调**抛异常 = fail-open**（保持现态不触发重连；NONE 态仍
+False）——「探测跑不成 ≠ 不健康」。0.1.1 前为 fail-closed（仪器故障会被当链路
+死亡触发无谓重连），消费方 ocx 本地 `probe_target` 一直是对的（fail-open），模板
+0.1.2 起与蓝本一致。

@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/template/tunnel_kit/tunnel_kit.py | TEMPLATE-VER: 0.1.1
+# TEMPLATE-FROM: my-diy-tool-template/template/tunnel_kit/tunnel_kit.py | TEMPLATE-VER: 0.1.2
+# 0.1.2（W8-C N3）：alive() 的 probe 异常改 fail-open（蓝本 #45 对齐：探测跑不成
+#   ≠不健康，保持现态不触发重连；原 fail-closed 会把仪器故障当链路死亡）。
 # 0.1.1（W7 §4 随 reme 接入）：build_reverse_args 加 remote_bind 可选——远端只听
 #   127.0.0.1 的收紧形态（reme 既有语义，模板化收编）。
 # 0.1.0（W7，Decision 10/14）：统一 ssh 隧道模块——以 opencodex-helper 现有件为底抽象。
@@ -119,8 +121,10 @@ class TunnelTarget:
             try:
                 return bool(self.probe_cb())
             except Exception as exc:  # noqa: BLE001
-                self.log(f"tunnel probe error (fail-closed for healing): {exc}")
-                return False
+                # 蓝本 #45 fail-open（N3 修复，09-29）：探测跑不成 ≠ 不健康——
+                # 保持现态、不触发重连；NONE 态本无链路可保，仍 False。
+                self.log(f"tunnel probe error (fail-open, keep {self.state}): {exc}")
+                return self.state in (STATE_OWNED, STATE_ADOPTED)
         return self.state in (STATE_OWNED, STATE_ADOPTED)
 
     def _adopted_alive(self):
