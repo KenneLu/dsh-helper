@@ -3,7 +3,7 @@
 > 基准实现：reme-helper 的查-下-换链路（`src/main.py` 7098-7345，真实发过版、跑过替换）；
 > 另参考 local-speak2text/updater.py（稳定位形态）与 dsh/opencodex（运行目录形态）。
 > **本模块是"接口化"的旗舰案例**：dsh-helper 与 opencodex-helper 的副本与模板正文逐字节一致，
-> 差异全部收敛进各自的 `appconfig.py`（1.3.0 之前如此；1.3.0 起两边需重拷 `modules/update_helper/` 整夹）。
+> 差异全部收敛进各自的 `appconfig.py`（1.3.0 之前如此；1.3.0 起两边需重拷 `template/update_helper/` 整夹）。
 
 ## 定位
 

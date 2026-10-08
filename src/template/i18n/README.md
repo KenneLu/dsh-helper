@@ -18,7 +18,7 @@
 | `detect_system_lang()` | Win32 UI 语言探测 |
 
 > **状态一律经访问器读取（2.1.1 硬性口径）**：`LANG` 是**内部实现**，外部请用
-> `current_lang()`。包门面（`modules/i18n/__init__.py`）**不做 `import *`**——那会把
+> `current_lang()`。包门面（`template/i18n/__init__.py`）**不做 `import *`**——那会把
 > `LANG` 拷成静态副本，`init('en')` 后从包读仍是旧值，而 `t()` 已是英文。
 > 症状：菜单签名算出来不变 → 切了语言**菜单不重建**（通知英文、菜单中文）。
 > 实现为"只绑函数 + PEP 562 `__getattr__` 委派子模块"，故 `LANG` 每次读取都取真值。
