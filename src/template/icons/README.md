@@ -1,6 +1,5 @@
-# T6 · icons —— 代码生成双 ico
+# icons —— 代码生成双 ico
 
-> 规范出处：家族规范.md §G5。
 > 蓝本：local-speak2text/icons.py + reme-helper 的多尺寸帧表。
 
 ## 定位
@@ -18,7 +17,7 @@
 | CLI | `python src/icons.py`（dev 态 ico 落仓库根） |
 
 > 2026-09-19 更正：本表曾写 `make_image(size=64)` / `write_app_icons(out_dir=".")` / `--out`，
-> 与正本 `icons.py` 2.0.0 不符（CONFORMANCE §4.1.4）。**接口以正本为准**。
+> 与正本 `icons.py` 2.0.0 不符（§4.1.4）。**接口以正本为准**。
 
 ## 采纳步骤
 

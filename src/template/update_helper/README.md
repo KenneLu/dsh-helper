@@ -1,7 +1,5 @@
-# T4 · update_helper —— 在线更新三段式（查 → 下 → 换）
+# update_helper —— 在线更新三段式（查 → 下 → 换）
 
-> 规范出处：家族规范.md §G4/G4.1、§H 发布链规范 6（zip 约定）、§B4（**公共件冲突以
-> reme-helper 的已验证实现为基准**）。
 > 基准实现：reme-helper 的查-下-换链路（`src/main.py` 7098-7345，真实发过版、跑过替换）；
 > 另参考 local-speak2text/updater.py（稳定位形态）与 dsh/opencodex（运行目录形态）。
 > **本模块是"接口化"的旗舰案例**：dsh-helper 与 opencodex-helper 的副本与模板正文逐字节一致，
@@ -28,7 +26,7 @@
 | **`launch_pending_cmd(cmd=None, log=…)`** | 退出收尾**由此拉起**替换脚本：`CREATE_NO_WINDOW \| DETACHED_PROCESS`，返回是否已拉起（1.4.0）。别自己写 `os.system('start …')` |
 | `http_error_hint(exc)` / `failed_marker_path(update_dir)` / `build_apply_script(…, exe_name=None)` | 配额人话 / marker 路径 / 脚本生成（纯函数，供回归断言）。**`exe_name=`（1.4.5）**：渲染替身 exe 名（l-s2t 的测试用 `probe.exe`/`probe.vbs`），缺省走 `EXE_NAME` |
 | `UPDATE_READY` / `PENDING_CMD` | 兼容别名，**只读派生**（1.4.0）：模块里没有这两个全局，由 PEP 562 `__getattr__` 现算。外部请改用访问器 |
-| **`log=` 的形态（稳定承诺）** | 收进来的 `log` 必须是 **print 形态**——本模块按 `log("downloading", stem)`、`log("update staged:", staged, "->", target, "(bat %s)" % s)` 调用（全文 7 处，最多 5 个位置参数），**只收一个 message 的 log 传进来，会在"每次下载"/"每次拉起替换脚本"这类真路径上直接 TypeError**。`log_kit.make_logger` 自 1.0.3 起即为该形态（C-29 机械检查工具侧包装是否照抄签名） |
+| **`log=` 的形态（稳定承诺）** | 收进来的 `log` 必须是 **print 形态**——本模块按 `log("downloading", stem)`、`log("update staged:", staged, "->", target, "(bat %s)" % s)` 调用（全文 7 处，最多 5 个位置参数），**只收一个 message 的 log 传进来，会在"每次下载"/"每次拉起替换脚本"这类真路径上直接 TypeError**。`log_kit.make_logger` 自 1.0.3 起即为该形态（log-accepts-varargs 机械检查工具侧包装是否照抄签名） |
 
 > **状态一律经访问器读取（1.1.0 硬性口径；1.4.0 起结构上是唯一可能）**：状态住在
 > `_PUBLISHED` **dict 里就地改**，唯一写入点；`UPDATE_READY` / `PENDING_CMD` 是
@@ -39,7 +37,7 @@
 > 现在即便有人把 `import *` 加回来也复现不了——`import *` 不搬运 `__getattr__` 的派生名，
 > 只会明确报"没有该属性"。
 > 回归：`python my-diy-tool-template/sync_check.py --selftest`（E 组，含反向自证）
-> 与 `conformance_check.py --selftest`（C-21 / C-23 正反样本）。
+> 与 `conformance_check.py --selftest`（no-star-import-state / no-global-rebind 正反样本）。
 
 目标目录 `target_dir` 二选一：有稳定安装位的工具传 `INSTALL_DIR`（local-speak2text
 形态）；没有的传运行中 exe 所在目录（dsh/opencodex 形态）。`update_dir` 必须在目标目录
@@ -59,7 +57,7 @@
    丢弃 loopback ICMP 的机器上实测 **9.0s/拍** —— 名义 120s 变成约 18 分钟，而超时日志
    仍写 "after 120s"（**日志说谎**）。现用 `powershell -NoProfile -Command
    "Start-Sleep -Milliseconds {tick_ms}"`（不依赖网络；DETACHED 无 console ⇒ 不弹窗；
-   本机实测每拍 ≈1.29s，含 PowerShell 启动费）。机械判据：`conformance_check.py` **C-33**。
+   本机实测每拍 ≈1.29s，含 PowerShell 启动费）。机械判据：`conformance_check.py` **no-ping-as-sleep**。
 3. **替换前先快照，且只在替换成功后轮转为备份**：旧备份是**回退源**，绝不能在新版落地前删。
 4. **检查 robocopy 退出码（>=8 = 失败）**：失败时**绝不启动新 exe**，改为从快照回铺并启动
    旧版本；回铺也失败则**不启动任何 exe**，保留快照供人工恢复，并写失败 marker——1.5.0 起 marker **按实况**只列真实存在的 SNAPSHOT/BACKUP（不指向已轮转不存在的路径）。
@@ -85,7 +83,7 @@
 
 ## 采纳步骤
 
-<!-- 下面三个符号是 C-27「采纳 = 拷贝 + 接线」的机械判据锚点：
+<!-- 下面三个符号是 module-wiring-referenced「采纳 = 拷贝 + 接线」的机械判据锚点：
      README 里声明"必须调用"，检查器就在**工具代码**里找引用；只在 README 出现不算接线。
      反面教材：dsh/ocx 曾把三件拷到位（哈希全绿）而 sweep/pop 零引用——失败通知永不触发。 -->
 <!-- MUST-WIRE: sweep_stale_update_dirs -->
@@ -94,7 +92,7 @@
 
 1. `appconfig.py` 填 `APP_ID / REPO_OWNER / REPO_NAME / EXE_NAME`；
 2. 拷 `update_helper.py`（**零修改**）；
-3. 托盘加"检查更新 / 下载并更新"两项（D14 更新区），quit 收尾处拉起 `pending_cmd()`；
+3. 托盘加"检查更新 / 下载并更新"两项（更新区），quit 收尾处拉起 `pending_cmd()`；
 4. 启动后台 `check_update(VERSION)` 一次；**启动时先** `sweep_stale_update_dirs()`，
    再 `pop_failed_update_note(update_dir)`，非空就通知用户；
 5. 菜单项自行限制打包态（模板不做 frozen 判断）：dsh/ocx 在 `enabled=` 里判 `sys.frozen`。
@@ -103,5 +101,5 @@
 
 - sha256 不匹配**或发布页缺 `.sha256`** 都中止，绝不落地（fail-closed 口径）；
 - 更新器要等本进程消失才能换文件——退出路径必须保证真正退出；
-- `VERSION` 不由本模块定义：各工具把它从**自己的单一事实源**读出来（STANDARDS D1），
+- `VERSION` 不由本模块定义：各工具把它从**自己的单一事实源**读出来（§构建门禁），
   调 `check_update(VERSION)` 时传入；`appconfig.py` 不重复登记版本号。

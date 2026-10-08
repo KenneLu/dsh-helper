@@ -22,7 +22,7 @@ import tempfile
 import time
 from pathlib import Path
 
-# R2（2026-09-19 lead 裁定）：测试/探针的临时目录一律放 `H:\Tools\_verify-scratch\`，
+# 2026-09-19 lead 裁定：测试/探针的临时目录一律放 `H:\Tools\_verify-scratch\`，
 # 不得在系统 `%TEMP%` 里留家族前缀的目录。可用 DSH_HELPER_SCRATCH_DIR 覆盖（CI 用）。
 _SCRATCH_ENV = "DSH_HELPER_SCRATCH_DIR"
 _DEFAULT_SCRATCH = r"H:\Tools\_verify-scratch"

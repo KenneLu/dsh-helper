@@ -1,7 +1,7 @@
-# tray_icons — 托盘状态贴图运行时加载（T6b，1.0.0，W6）
+# tray_icons — 托盘状态贴图运行时加载
 
-运行时**只加载资产、零绘制代码**（Decision 6）。资产由构建期 `icons.make_state_icons`
-产出为 `resources/icons/<state>/<size>.png`（按档存帧——resize 状态角标会偏移，F25）。
+运行时**只加载资产、零绘制代码**。资产由构建期 `icons.make_state_icons`
+产出为 `resources/icons/<state>/<size>.png`（按档存帧——resize 状态角标会偏移）。
 
 ## 消费方装配
 

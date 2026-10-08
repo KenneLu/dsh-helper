@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""T6 构建工具的仓库根入口（工具自有壳，W6 薄壳化——正本唯一在 src/template/icons/）。
+"""构建工具的仓库根入口。
 
-build.bat GATE 调 `python src\icons.py`：脚本目录（src/）自动进 sys.path。
-此前本文件是模板正本的完整副本（W1 平铺残留），模板升级它不会跟——改薄壳委派。
+build.bat GATE 调 `python src\icons.py`：脚本目录（src）自动进 sys.path。
+本文件为薄壳委派（不复制正本），正本升级即跟随。
 """
 import sys
 from pathlib import Path

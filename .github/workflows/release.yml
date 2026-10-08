@@ -47,7 +47,7 @@ jobs:
         run: python -m py_compile src/main.py src/icons.py src/template/appconfig/appconfig.py src/template/update_helper/update_helper.py src/template/paths/paths.py src/template/log_kit/log_kit.py src/template/tray_kit/tray_kit.py
 
       # Same chain as the local build.bat: gates + PyInstaller + release layout
-      # (release\<name>-<ver>\<name>.exe, exe carries no version - B3).
+      # (release\<name>-<ver>\<name>.exe, exe carries no version - naming-and-version).
       # nosmoke: the frozen smoke gate validates the real dsh.cmd, which CI
       # runners don't have - skipped here per the "CI-unavailable resource is
       # explicitly skipped, reason stated" rule (G3); local builds keep it ON.

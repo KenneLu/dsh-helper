@@ -33,8 +33,8 @@ if errorlevel 1 (
   exit /b 1
 )
 
-rem Version single source of truth: VERSION in src\main.py (D15/D16).
-rem Two-step parse (D1 0.1): split on '=', then keep the first whitespace-delimited
+rem Version single source of truth: VERSION in src\main.py.
+rem Two-step parse (build-gate 0.1): split on '=', then keep the first whitespace-delimited
 rem token. A trailing comment on the VERSION line would otherwise be swallowed into
 rem the version string by the old "tokens=2,*" form and mangle the release path.
 set VERSION=
@@ -49,20 +49,20 @@ set VERSION=%VERSION:"=%
 set APPNAME=dsh-helper
 set RELEASE_DIR=release\%APPNAME%-%VERSION%
 set FROZEN_EXE=%RELEASE_DIR%\%APPNAME%.exe
-rem The exe must NOT carry the version (B3): autostart and the update chain
+rem The exe must NOT carry the version (naming-and-version): autostart and the update chain
 rem reference a stable name; the release folder and zip name carry the version.
 
 echo [VERSION] %VERSION%  release: %RELEASE_DIR%
 
-rem G1 RELAXED (2026-09-19, C2): target-dir existence is INFO, not a refusal.
-rem The refusal condition is the running-instance guard below (D1-02); safety comes
-rem from C2 - the live instance holds its own exe (no FILE_SHARE_DELETE), so the
+rem release-layout RELAXED (2026-09-19): target-dir existence is INFO, not a refusal.
+rem The refusal condition is the running-instance guard below (build-run-detect); safety comes
+rem from exe-delete-guard - the live instance holds its own exe (no FILE_SHARE_DELETE), so the
 rem kernel rejects deleting it with winerror 32 rather than emptying it silently.
 rem CLEANLINESS IS NOT RELAXED: the old dir is removed right after that guard, so
 rem the build always assembles from scratch and never reuses a stale file.
 if exist "%RELEASE_DIR%" echo [INFO] %RELEASE_DIR% exists - will be removed and rebuilt from scratch.
 
-rem Running-instance guard (D1-02 refined 2026-09-19): refuse ONLY when the live
+rem Running-instance guard (build-run-detect refined 2026-09-19): refuse ONLY when the live
 rem instance runs FROM THE TARGET release dir. Building a DIFFERENT version dir is
 rem safe - files differ, and the frozen smoke pins DSH_HELPER_DATA_DIR and never
 rem takes the mutex. What IS unsafe is deleting/overwriting the dir a live instance
@@ -97,7 +97,7 @@ if defined RUNNING_DIR if /i "%RUNNING_DIR%"=="%TARGET_DIR%" (
 )
 if defined RUNNING_DIR echo [INFO] %APPNAME% running from "%RUNNING_DIR%" - not the target dir, build continues.
 
-rem G1 relaxed: remove the existing same-version dir NOW (after the guard) so the
+rem release-layout relaxed: remove the existing same-version dir NOW (after the guard) so the
 rem assembly below starts from zero. A live instance would have been refused above;
 rem any other lock makes rmdir fail loudly right here instead of silently reusing.
 if exist "%RELEASE_DIR%" (
@@ -118,7 +118,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-rem i18n gate (T1/D1-04): the locales must answer the core keys in BOTH languages,
+rem i18n gate (bilingual-i18n): the locales must answer the core keys in BOTH languages,
 rem zh is the base table and en must not silently fall back for menu/nav keys.
 echo [GATE] i18n key coverage ...
 "%PY%" -c "import json,sys; zh=json.load(open(r'locales/zh.json',encoding='utf-8')); en=json.load(open(r'locales/en.json',encoding='utf-8')); keys=['menu_quit','menu_autostart','menu_language','menu_start','menu_stop','menu_restart','menu_open_logs','notify_stopped','status_running']; miss=[k for k in keys if not zh.get(k) or not en.get(k)]; print('i18n core keys:',len(keys),'missing:',miss); sys.exit(1 if miss else 0)"
@@ -128,9 +128,9 @@ if errorlevel 1 (
   exit /b 1
 )
 
-rem lang-audit gate (T5): no user-visible Chinese literal may bypass the zh table.
+rem lang-audit gate: no user-visible Chinese literal may bypass the zh table.
 rem Redirect the data root so the audit's module import never touches the developer's
-rem live %LOCALAPPDATA% config/log (F11/D12).
+rem live %LOCALAPPDATA% config/log.
 echo [GATE] lang-audit ...
 set "DSH_HELPER_DATA_DIR=%CD%\build\lang-audit-data"
 "%PY%" src\main.py --lang-audit
@@ -143,17 +143,17 @@ if not "%AUDIT_RC%"=="0" (
   exit /b 1
 )
 
-rem tests/ suite (D1 1.5): update-chain regression, fully stubbed. Each test pins
+rem tests/ suite (build-gate 1.5): update-chain regression, fully stubbed. Each test pins
 rem its own <APP>_DATA_DIR before importing main, and takes no mutex / writes no registry.
 rem
-rem F11/D12 harness pin (2026-09-19): pinning inside each test file is a DISCIPLINE, and
+rem harness pin (2026-09-19): pinning inside each test file is a DISCIPLINE, and
 rem a new test file that forgets it writes the developer's live %LOCALAPPDATA% root while
 rem the build still goes green (that is how the unpinned roots were found). Pin the whole
 rem suite once here so that class of accident is not possible; the per-file pins stay,
 rem because a test run outside build.bat must still be isolated. Belt and braces - this
 rem does not replace them.
 rem ---------------------------------------------------------------------------
-rem R-10 / C-30 runtime half: %TEMP% residue must not GROW while the tests run.
+rem temp-leak-regression / mkdtemp-owned-prefix runtime half: %TEMP% residue must not GROW while the tests run.
 rem The baseline is what already existed BEFORE this build, so historical residue
 rem can never be misread as red - only directories that APPEAR during the build
 rem count as a leak. Skipped when the template repo is absent (CI checks out a
@@ -162,7 +162,7 @@ rem build artifact and build/ is gitignored.
 rem ---------------------------------------------------------------------------
 if not exist "..\my-diy-tool-template\conformance_check.py" goto :templeak_skip
 if not exist "build" mkdir "build"
-echo [GATE] temp-leak baseline (R-10) ...
+echo [GATE] temp-leak baseline (temp-leak-regression) ...
 "%PY%" "..\my-diy-tool-template\conformance_check.py" --roots %APPNAME% --temp-leak-save "build\_tmpbase.txt"
 if errorlevel 1 goto :templeak_fail
 goto :templeak_saved
@@ -182,18 +182,18 @@ for %%t in (tests\test_*.py) do (
 set "DSH_HELPER_DATA_DIR="
 if exist "%CD%\build\test-data" rmdir /s /q "%CD%\build\test-data"
 rem ---------------------------------------------------------------------------
-rem R-10 increment: only directories that appeared DURING this build count.
+rem temp-leak-regression increment: only directories that appeared DURING this build count.
 rem A one-off clean-up is not evidence - it is a single point in time. Compare
 rem only against the baseline saved before the tests ran.
 rem ---------------------------------------------------------------------------
 if not exist "build\_tmpbase.txt" goto :templeak_done
-echo [GATE] temp-leak increment check (R-10) ...
+echo [GATE] temp-leak increment check (temp-leak-regression) ...
 "%PY%" "..\my-diy-tool-template\conformance_check.py" --roots %APPNAME% --temp-leak-baseline "build\_tmpbase.txt"
 if errorlevel 1 goto :templeak_fail
 del /q "build\_tmpbase.txt"
 goto :templeak_done
 :templeak_fail
-echo [ERROR] temp-dir leak: %TEMP% gained NEW residue during this build (R-10).
+echo [ERROR] temp-dir leak: %TEMP% gained NEW residue during this build (temp-leak-regression).
 if not defined NOPAUSE pause
 exit /b 1
 :templeak_done
@@ -269,7 +269,7 @@ if not exist "%RELEASE_DIR%\_internal\base_library.zip" (
   if not defined NOPAUSE pause
   exit /b 1
 )
-rem Tk runtime D1: the quit/confirm dialogs need it.
+rem Tk runtime build-gate: the quit/confirm dialogs need it.
 rem Without these the package stays silent until the FIRST dialog - i.e. until the user
 rem clicks Quit. Evidence: opencodex-helper 1.2.2 log 2026-09-19 17:00:51, init.tcl not found.
 rem exe + base_library alone keep every gate green, which is how this gap survived.
@@ -301,7 +301,7 @@ if not exist "%RELEASE_DIR%\config.json" (
 
 set "PYTHONUTF8=1"
 if defined NOSMOKE goto :smoke_done
-rem Instance isolation (F11/D12): the smoke run must not read or rewrite the
+rem Instance isolation: the smoke run must not read or rewrite the
 rem developer's live AppData config/log - DUAL PIN (both env vars) so the config
 rem file is pinned too, not just the data root. Both land in a throwaway dir
 rem inside the release folder, cleaned up right after the smoke.
@@ -318,7 +318,7 @@ set "DSH_HELPER_DATA_DIR="
 set "DSH_HELPER_CONFIG="
 if not "%SMOKE_RC%"=="0" (
   echo [ERROR] smoke test failed. See %RELEASE_DIR%\smoke-data\log
-  rem Report BEFORE cleaning (C-32): the failure evidence must reach the build
+  rem Report BEFORE cleaning (no-delete-before-report): the failure evidence must reach the build
   rem output first. The success path below already does report-then-clean; what
   rem this path was missing is the REPORT step, not the cleanup. Ordering the
   rem cleanup earlier would delete the evidence before anyone could read it.

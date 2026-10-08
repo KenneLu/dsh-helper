@@ -19,14 +19,14 @@ Tk 桩的严格性（J-坑）：桩抛的是**真的 `tkinter.TclError`**（从�
 `stop_process_group` / `state_copy` 的桩**照抄生产签名**（含 `graceful=True`），
 不许放宽。
 
-实例隔离（F11/D12）：import main 之前重定向数据根，绝不碰用户真实 AppData。
+实例隔离：import main 之前重定向数据根，绝不碰用户真实 AppData。
 STOP_EVENT 是模块级状态，每条腿之间必须 clear，否则第③条会被重入守卫挡掉而**假绿**。
 """
 import os
 import sys
 import types
 from pathlib import Path
-from _cleanup import rmtree_cleanup, scratch_dir  # noqa: E402  （R2 位置 + 删前放句柄）
+from _cleanup import rmtree_cleanup, scratch_dir  # noqa: E402  （scratch 目录位置 + 删前放句柄）
 
 _TMP = scratch_dir("dsh-quit-test-")
 os.environ["DSH_HELPER_DATA_DIR"] = _TMP

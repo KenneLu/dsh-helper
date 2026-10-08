@@ -4,7 +4,7 @@ All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
 ## 1.8.2
-- **Startup self-identification** (2026-09-20, C-38): the `startup` line is now followed by the
+- **Startup self-identification** (2026-09-20, 判据·启动自证): the `startup` line is now followed by the
   **resolved** data root and config path - `data root: <USER_DATA_DIR>` / `config   : <CONFIG_PATH>`,
   the canonical form given by CONFORMANCE §4.1.38. Why it earns a log line: probes launched via
   `python -c` or a heredoc **never touch disk**, so no source-code scan can attribute the artefacts
@@ -12,8 +12,8 @@ The tagging convention matches the versions in this file.
   writes. Placed right after the single-instance guard (the point where "this startup succeeded")
   and before the C-2 delete-guard, so that guard's "only legal window" constraint is not moved.
 - **English mode: the quit dialog and the duplicate-launch popup still showed Chinese** (2026-09-19
-  defect, found by extending the R-07 scan surface to the call sites). `tray_kit.confirm_quit_dialog`
-  and `warn_duplicate_instance` are **pure-mechanism** helpers - their docstring (2.0.2 / E4-02)
+  defect, found by extending the 回归·i18n覆盖 scan surface to the call sites). `tray_kit.confirm_quit_dialog`
+  and `warn_duplicate_instance` are **pure-mechanism** helpers - their docstring (2.0.2 / )
   states that an i18n-enabled tool must pass `title`/`body_text`/`confirm_text`/`cancel_text` as
   `t()` entries and that the built-in Chinese wording is only a compatibility default for old call
   sites. Both of our call sites passed **no text argument at all**, so the defaults leaked: in
@@ -33,7 +33,7 @@ The tagging convention matches the versions in this file.
   with every gate green. `build.bat` picks the suite up automatically (`for %%t in (tests\test_*.py)`).
 - **Module-copy hygiene in the same batch: six `__init__.py` carried the template's own header form**
   (raw byte copies, including the template's `# TEMPLATE-MODULE:` line and its stale-looking
-  `TEMPLATE-VER`), so the provenance link back to the template path was missing - and C-19 accepts
+  `TEMPLATE-VER`), so the provenance link back to the template path was missing - and 判据·派发头齐 accepts
   both header forms, so no gate would have reported it. Translated to `# TEMPLATE-FROM: ...`, first
   line only, each copy keeping **its own file's** version (not the sibling module's).
   `update_helper.py` was re-copied from the template byte-exactly as well (the 1.4.4 change was
@@ -67,7 +67,7 @@ The tagging convention matches the versions in this file.
   record a verifiable reason why the inline form is better - per B4 principle 3 and the two
   allowed-difference premises.
 - **The tray menu is now rebuilt only when something it displays actually changed**
-  (E2-09). Every state change used to call `icon.update_menu()` unconditionally, and
+  (). Every state change used to call `icon.update_menu()` unconditionally, and
   pystray rebuilds by `DestroyMenu` + `CreatePopupMenu` - so a rebuild while the menu
   was open yanked it out from under the cursor (the "loses focus while you slide down
   it" symptom). The tool now feeds a tuple of everything the menu shows into
@@ -82,7 +82,7 @@ The tagging convention matches the versions in this file.
   log(*parts)`, which is the contract `update_helper`/`tray_kit` have always called it
   with) and `modules/paths/README.md` copied byte-for-byte (the `process_pending_update`
   deprecation notice).
-- **All Tk work now goes through one dedicated thread** (E1-03/I-03). The dialogs were
+- **All Tk work now goes through one dedicated thread** (/落地·入口骨架). The dialogs were
   opened from `threading.Thread` workers (so the tray stays responsive while the user
   types), which meant building and destroying a Tk interpreter **on a worker thread** -
   that works only by accident on some `_tkinter` builds and breaks on others. `ui_post()`
@@ -100,7 +100,7 @@ The tagging convention matches the versions in this file.
   case runs under a watchdog so a deadlock is reported as a red assertion instead of
   hanging the gate.
 - **Test scratch roots moved out of `%TEMP%`; cleanup is now asserted, not assumed**
-  (lead rulings R1/R2/R4, after 15 modal Windows Script Host dialogs landed on the
+  (lead rulings R1/R2, after 15 modal Windows Script Host dialogs landed on the
   user's desktop). Two separate things were wrong here:
   * **R2**: all five suites used `tempfile.mkdtemp(prefix="dsh-...")`, so every gate run
     left a directory behind - 36 had accumulated. The cause is the same one l-s2t
@@ -112,7 +112,7 @@ The tagging convention matches the versions in this file.
     `rmtree_cleanup()` drops the log handlers, retries, and **returns False unless the
     directory is really gone** - each suite asserts it, so a future leak turns the gate
     red instead of accumulating silently. Existing leftovers were removed.
-  * **R1+R4**: the one place a test really launches an external script now says so
+  * **R1**: the one place a test really launches an external script now says so
     explicitly - the stand-in `probe.cmd` is created **before** the launch and always
     exists ("was it started" is judged by the **side effect**, a marker file, never by
     the target being absent: `start` on a missing target pops a *modal* box), and the
@@ -178,7 +178,7 @@ this batch was rolled back to 1.8.1.
   `update_helper.launch_pending_cmd()`, which launches `cmd /c <script>` with
   `CREATE_NO_WINDOW | DETACHED_PROCESS` so the script outlives the parent and completes
   the swap invisibly (the reme form). This was also the last `MUST-WIRE` symbol the
-  module README declared, so conformance **C-27** ("adoption = copy + wire", new
+  module README declared, so conformance **module-wiring-referenced** ("adoption = copy + wire", new
   template check) now reports 3/3 instead of failing on this repo.
 - Tests: `test_update_chain.py` pins the new form and would go red if the old one came
   back - it asserts `launch_pending_cmd` receives the stored path, asserts `os.system`
@@ -259,7 +259,7 @@ this batch was rolled back to 1.8.1.
   no network) and wired into build.bat as a gate:
   - `test_single_instance.py` - mutex name matches the family derivation, the
     kernel accepts it, the old illegal name still fails, acquire/refuse uses a
-    test-only name (SINGLE-08), and the guard fails open.
+    test-only name (单实例·内核对象隔离), and the guard fails open.
   - `test_startup_path.py` - runs the real `main()` with heavy stubs and asserts
     the startup sequence is reached (log `startup`, `migrate_autostart`, command
     detection).
@@ -270,7 +270,7 @@ this batch was rolled back to 1.8.1.
 - Frozen smoke now **dual-pins** `DSH_HELPER_DATA_DIR` + `DSH_HELPER_CONFIG`
   (the config is a throwaway copy inside smoke-data, so the shipped config is
   never rewritten) - D1 unified convention.
-- Single-instance guard probe (D3.1/C-10): `--smoke` now calls
+- Single-instance guard probe (D3.1/判据·smoke不绕): `--smoke` now calls
   `tray_kit.mutex_name_is_valid(APP_ID)`, so an illegal mutex name fails the
   build loudly - that silent failure once kept a sibling tool dead for months
   while every gate stayed green. `tests/test_single_instance.py` asserts the

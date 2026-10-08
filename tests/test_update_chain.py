@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""更新链回归（T4）：菜单点亮 + 退出拉起 apply.cmd。全打桩，无网络、无真实更新。
+"""更新链回归：菜单点亮 + 退出拉起 apply.cmd。全打桩，无网络、无真实更新。
 
 回归背景：模板包曾 `from .update_helper import *`，把 PENDING_CMD 拷成静态副本，
 工具读到恒 None → apply.cmd 永不拉起（更新装了等于没装，且无报错）；UPDATE_READY
 也曾恒 None → 「下载并更新」永久灰。修法 = 只认返回值：check_update() 的
 result["latest"]、download_and_prepare() 的返回脚本路径，状态由工具自持。
 
-实例隔离（F11/D12）：必须在 import main 之前重定向数据根，绝不碰用户真实 AppData。
+实例隔离：必须在 import main 之前重定向数据根，绝不碰用户真实 AppData。
 断言：
   ① 发现新版 → 工具缓存 LATEST_VERSION（菜单 enabled 条件）
   ② 下载完成 → 工具缓存 download_and_prepare() 的返回脚本路径
@@ -20,7 +20,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from _cleanup import rmtree_cleanup, scratch_dir  # noqa: E402  （R2 位置 + 删前放句柄）
+from _cleanup import rmtree_cleanup, scratch_dir  # noqa: E402  （scratch 目录位置 + 删前放句柄）
 
 _TMP = scratch_dir("dsh-update-test-")
 os.environ["DSH_HELPER_DATA_DIR"] = _TMP
@@ -38,7 +38,7 @@ def check(name, ok, detail=""):
         FAILS.append(name)
 
 
-# R4：被执行的脚本必须有超时；超时即 FAIL 并点名「疑似模态框」。
+# 被执行的脚本必须有超时；超时即 FAIL 并点名「疑似模态框」。
 _LAUNCH_TIMEOUT = 10.0
 
 
@@ -146,7 +146,7 @@ check("launch flags suppress the console and detach the child",
       _ok is True and _seen.get("flags") == _want, repr(_seen))
 
 # 真的拉一次：脚本落一个标记文件，证明它脱离父进程后确实跑起来了。
-# R1（2026-09-19 lead 裁定）：替身**必须先创建且始终存在**——`start` 指向不存在的
+# 2026-09-19 lead 裁定：替身**必须先创建且始终存在**——`start` 指向不存在的
 # 目标（.exe 或 .vbs）会弹**模态框**，无人值守下永久挂死（用户桌面上刚爆过 15 个
 # WSH「无法找到脚本文件」）。所以"有没有被启动"一律看**副作用**（marker 是否写入），
 # 绝不用"目标缺失"构造场景——那是拿模态框当断言，等于把测试变成炸弹。
@@ -160,7 +160,7 @@ while time.monotonic() - _start < _LAUNCH_TIMEOUT and not _marker.is_file():
 _elapsed = time.monotonic() - _start
 check("the script really runs detached", _ok is True and _marker.is_file(),
       "marker=%s elapsed=%.1fs" % (_marker.is_file(), _elapsed))
-# R4：把"挂死"变成"红灯"。超时的第一嫌疑是**模态框**（start 目标缺失 / 真跑单实例
+# 把"挂死"变成"红灯"。超时的第一嫌疑是**模态框**（start 目标缺失 / 真跑单实例
 # 守卫），不是"脚本慢"——无人值守路径上一次都挂不起。
 check("launch did not hang (< %.1fs)" % _LAUNCH_TIMEOUT, _elapsed < _LAUNCH_TIMEOUT,
       "elapsed=%.1fs —— 若超时，疑似模态框（start 目标缺失或真跑单实例守卫）" % _elapsed)

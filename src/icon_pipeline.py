@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""dsh 图标像素链（W6/D12：自 main.py 运行时退役挪构建期，跑一次产状态帧）。
+"""dsh 图标像素链。
 
 视觉语义与旧运行时逐像素等价（_remove_baked_background → 裁剪居中 256 画布 →
 running=_brighten_beacon 暖金提亮 / stopped=灰度 colorize）。appconfig 的

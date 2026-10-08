@@ -35,7 +35,7 @@
 - 把红态输出里**旧的错误行为原文**留在提交信息里。例：`proceeding without confirmation`
   紧跟着 `quit cancelled by user`——**矛盾本身就是证据**，比任何断言描述都直观。
 
-### 4. 实例隔离（F11/D12）
+### 4. 实例隔离
 
 - `<APP>_DATA_DIR` / `<APP>_CONFIG` 必须在**第一次 import `src`** 之前设好；import 期就有落盘副作用。
 - 碰注册表的测试必须**备份 → 操作 → 还原 → 回读断言**（还原本身要断言，不能"尽力而为"）。

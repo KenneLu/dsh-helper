@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""单实例守卫（CONFORMANCE SINGLE-01 / SINGLE-02 / SINGLE-07 / SINGLE-08）。
+"""单实例守卫。
 
 回归背景：命名互斥体名一旦含第二个反斜杠（`Local\\<app>\\SingleInstance`），
 `CreateMutexW` 恒失败 err=3，而守卫把"创建失败"当成"已有实例" → 工具永远打不开。
-`specific` 断言按 SINGLE-08 拆开：命名正确性用纯字符串 + 建/关不持有（用户实例
+`specific` 断言按 单实例·内核对象隔离 拆开：命名正确性用纯字符串 + 建/关不持有（用户实例
 在跑时也能过），抢锁/拒绝用**测试专属名**（显式 mutex_name=），绝不占用生产名。
 
 实例隔离：import main 之前重定向数据根；守卫是内核对象，数据根管不到它，
@@ -15,7 +15,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
-from _cleanup import rmtree_cleanup, scratch_dir  # noqa: E402  （R2 位置 + 删前放句柄）
+from _cleanup import rmtree_cleanup, scratch_dir  # noqa: E402  （scratch 目录位置 + 删前放句柄）
 
 _TMP = scratch_dir("dsh-single-test-")
 os.environ["DSH_HELPER_DATA_DIR"] = _TMP

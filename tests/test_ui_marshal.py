@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""UI 队列封送（CONFORMANCE E1-03 / I-03）。
+"""UI 队列封送。
 
 tkinter 不是线程安全的，而对话框是在工作线程里弹的（为了不阻塞托盘）。封送把
 **所有 Tk 工作收进同一个常驻线程**：跨线程只传「队列里的一个可调用对象」。
@@ -10,7 +10,7 @@ tkinter 不是线程安全的，而对话框是在工作线程里弹的（为了
   ① 没经过 main() 也必须能跑（线程按需懒启动）；
   ② 已经在 Tk 线程上时直接跑（否则自己投的活自己等 = 自锁）。
 
-实例隔离（F11/D12）：import main 之前重定向数据根。
+实例隔离：import main 之前重定向数据根。
 """
 import os
 import shutil
@@ -18,7 +18,7 @@ import sys
 import tempfile
 import threading
 from pathlib import Path
-from _cleanup import rmtree_cleanup, scratch_dir  # noqa: E402  （R2 位置 + 删前放句柄）
+from _cleanup import rmtree_cleanup, scratch_dir  # noqa: E402  （scratch 目录位置 + 删前放句柄）
 
 _TMP = scratch_dir("dsh-ui-test-")
 os.environ["DSH_HELPER_DATA_DIR"] = _TMP

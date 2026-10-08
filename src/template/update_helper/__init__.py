@@ -40,7 +40,6 @@ __all__ = [
     "pop_failed_update_note", "sweep_stale_update_dirs", "update_ready", "verify_zip_sha256",
 ]
 
-
 def __getattr__(name):
     """PEP 562：包命名空间查不到的名字（`UPDATE_READY`/`PENDING_CMD`/…）每次读取取真值。"""
     try:

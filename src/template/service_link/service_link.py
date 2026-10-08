@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # TEMPLATE-FROM: my-diy-tool-template/template/service_link/service_link.py | TEMPLATE-VER: 0.2.0
-# 0.2.0（W7 §1）：**启动编排三件 + 就绪钩子**——①STARTING 态（NONE→STARTING→OWNED，
+# 0.2.0：**启动编排三件 + 就绪钩子**——①STARTING 态（NONE→STARTING→OWNED，
 #   launch 抛异常回滚 NONE——旧版 launch 失败会卡在半启动态）；②wait_ready(timeout,
 #   abort_event)（对齐 reme wait_for_health：STOP_EVENT 立断、健康轮询、超时如实报）；
 #   ③ensure_running()（probe 命中→ADOPTED 收养；否则 start+wait_ready——「服务就绪后
@@ -8,7 +8,7 @@
 #   README 补 abort_event 装配规约（shutdown 竞态，reme main.py:2826-2828 教训）。
 """服务接入与唯一性（helper ↔ 服务 的所有权模型）。
 
-规范出处：家族规范.md §G4.2。四条铁律：
+四条铁律：
   唯一性   —— helper 的"启动"只在探测不到服务时允许执行；探测到即拒绝。
   外部自由 —— helper 之外手动多开服务实例属于业务自由，不阻止、不清理、不刷屏。
   接入     —— 以规范端点的实际应答者为唯一接入对象；接入 pid 登记后固定不漂移。
@@ -32,7 +32,6 @@ STATE_NONE = "none"        # 未发现服务
 STATE_STARTING = "starting"  # launch 已发、就绪未确认（0.2.0）：wait_ready 的窗口态
 STATE_ADOPTED = "adopted"  # 识别接入：服务不是本 helper 启动的
 STATE_OWNED = "owned"      # 本 helper 启动并持有句柄（就绪已确认或调用方不等就绪）
-
 
 class ServiceLink:
     """helper 与目标服务之间的唯一绑定。
@@ -138,7 +137,7 @@ class ServiceLink:
     def ensure_running(self, timeout=60.0, abort_event=None, interval=0.5):
         """服务确保在跑：probe 命中→收养（ADOPTED）；否则启动并等就绪。
 
-        「启动工具→拉服务→就绪后起隧道」的编排入口（W7）：一次调用完成
+        「启动工具→拉服务→就绪后起隧道」的编排入口：一次调用完成
         adopt-or-start + ready 确认，on_ready 回调在就绪瞬间触发。
         """
         state, healthy = self.refresh()

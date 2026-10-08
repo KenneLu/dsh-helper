@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # TEMPLATE-FROM: my-diy-tool-template/template/update_helper/update_helper.py | TEMPLATE-VER: 1.5.0
-# 1.5.0（W5 前段，D4 方案 B）：**吸收 reme 的两条失败可见性语义**（F14-①②）——
+# 1.5.0：**吸收 reme 的两条失败可见性语义**（-①②）——
 #   ①`:giveup` 超时**写 FAILED marker**（此前只写日志：bat 在应用退出后运行，
 #   "只写日志"等于"用户永远不知道更新没发生"；日志随暂存目录被清扫，marker
 #   落在用户数据区、下次启动 pop_failed_update_note 转人话）；
@@ -8,19 +8,19 @@
 #   SNAPSHOT/BACKUP；旧措辞恒说 "snapshot kept at %SNAPSHOT%"，在快照已轮转成
 #   BACKUP 的路径上指向不存在的路径——把用户引向一条死路）。
 #   语义源：reme-helper 已验证更新链（main.py:7242-7282），基准角色随本版移交模板。
-# 1.4.6（W1 改名过渡）：模块互引改双式导入（try modules. / except template.），
-#   兼容工具侧 src/modules/（未迁移）与 src/template/（已迁移）两种布局；W1 收尾步统一为 template.。
-# 1.4.5（任务 #32/T4）：**接口扩展，让"更新源运行时可配"能迁到模板**——
+# 1.4.6：模块互引改双式导入（try modules. / except template.），
+#   兼容工具侧 src/modules/（未迁移）与 src/template/（已迁移）两种布局；收尾步统一为 template。
+# 1.4.5：**接口扩展，让"更新源运行时可配"能迁到模板**——
 #   `check_update(..., repo=None)` / `download_and_prepare(..., repo=None)`：
 #   缺省仍走 appconfig 的 `REPO`；l-s2t 的 `config.json:update_repo` 有三重用户可见
 #   支撑（双语 README 承诺 / `update_no_repo` 专有文案 / build.bat 出厂默认值），
-#   切模板件时**不得静默丢掉**（施工单 §3-A）。
+#   切模板件时**不得静默丢掉**。
 #   `build_apply_script(..., exe_name=None)` / `download_and_prepare(..., exe_name=None)`：
 #   **给测试用的替身口子**——l-s2t 的 4 处测试刻意渲染 `probe.exe`/`probe.vbs`，
-#   那是 R1「替身必须存在」纪律在 bat 渲染层的落实（施工单 §3-C）。
-"""T4｜在线更新三段式：查（GitHub Releases）→ 下（zip + sha256）→ 换（退出后铺目录并重启）。
+#   那是 「替身必须存在」纪律在 bat 渲染层的落实。
+"""update_helper｜在线更新三段式：查（GitHub Releases）→ 下（zip + sha256）→ 换（退出后铺目录并重启）。
 
-**基准**：本件按用户仲裁规则（STANDARDS B4）以 reme-helper 的**已验证更新链**为准
+**基准**：本件按用户仲裁规则（§公共模板库）以 reme-helper 的**已验证更新链**为准
 （`reme-helper/src/main.py` 7098-7345；语义清单见 `reme-helper/UPDATE-CHAIN-REFERENCE.md`），
 不以"用的人多"为准。
 
@@ -35,7 +35,7 @@
 （本条可机械判据化：渲染 `limit=2` 必须出现 `budget 2s`。判据落点在 `sync_check --selftest`
 的 update_helper 组，不在本文件。）
 
-1.4.3（2026-09-19）：**两处修复**（都可机械判据化，见 conformance_check C-32/C-33）：
+1.4.3（2026-09-19）：**两处修复**（都可机械判据化，见 conformance_check no-delete-before-report/no-ping-as-sleep）：
 
   * **等待节拍不再用 `ping`**：`ping -n 2 127.0.0.1` 看着像“睡 1 秒”，在**丢弃 loopback ICMP**
     的机器上实测 **9.0s/拍**（两次 4.5s 超时）
@@ -44,7 +44,7 @@
     DETACHED 进程无 console，子进程不弹窗），常量拆成 `UPDATE_WAIT_LIMIT`（**轮询次数**）×
     `UPDATE_WAIT_TICK_MS`（每拍毫秒），超时行报告
     `%tries% polls x {tick_ms}ms (...) lower bound`——**不再打印没人量过的"秒"**。
-  * **`pop_failed_update_note` 改成"先报告、最后删证据"**（C-32）：旧顺序在 `unlink` 抛
+  * **`pop_failed_update_note` 改成"先报告、最后删证据"**（no-delete-before-report）：旧顺序在 `unlink` 抛
     OSError 时走 except 直接 `return ""`，detail 明明读到了用户却看不到提示；调用边界上的
     错误（arity/签名不符）更是连 `except OSError` 都拦不住。删不掉就留给下次再报。
 
@@ -61,7 +61,7 @@
 1.4.0（2026-09-19）：照该基准清单 §9 第 1、2 条，把两件事做成**结构上不可能再犯**——
 而不是继续靠约定挡着：
 
-  * **状态改为"可变容器就地改 + 只读派生"**（STANDARDS §D6）。1.3.0 仍是
+  * **状态改为"可变容器就地改 + 只读派生"**（§状态唯一写入点）。1.3.0 仍是
     `UPDATE_READY = None` 这类**模块级标量 + 函数内 `global` 重绑**——正是两次静默失效
     （`i18n.LANG`、`PENDING_CMD`）的形态；1.3.0 只是靠"包门面改用 `__getattr__` 委派"
     挡着，谁把 `import *` 加回来就又中招。现在：**唯一写入点**是 `_PUBLISHED` dict 的
@@ -128,7 +128,7 @@ CHECK_INTERVAL = 24 * 3600
 # ⚠️ 2026-09-19 缺陷（五份都在）：节拍原是 `ping -n 2 127.0.0.1`，本意"睡 1 秒"，在**丢弃
 # loopback ICMP** 的机器上实测 **9.0 s/拍**（两次 4.5s 超时）→ 名义 120s 实际约 18 分钟，
 # 而 `:giveup` 还打印 "after 120s"——**日志说谎**。教训：等待/超时的单位假设**必须实测量过**；
-# 禁止 ping 当节拍已升级为机械判据 C-33。
+# 禁止 ping 当节拍已升级为机械判据 no-ping-as-sleep。
 UPDATE_WAIT_LIMIT = 120
 UPDATE_WAIT_TICK_MS = 1000
 # 默认 limit 下的名义预算。**渲染器不得直接用它**（1.4.4 修复）：调用方可以传别的 limit，
@@ -148,7 +148,7 @@ FAILED_MARKER_NAME = "update.failed"
 
 # 「查」的节流状态（就地改，见 check_update）
 _STATE = {"checked_for": "", "latest": "", "at": 0.0}
-# 「对外可见状态」的唯一写入点（STANDARDS §D6）。
+# 「对外可见状态」的唯一写入点（§状态唯一写入点）。
 # 刻意**不做**模块级标量：标量一旦被函数内 `global` 重绑，外部经包命名空间读到的就是死副本
 # （i18n.LANG / PENDING_CMD 两次静默失效）。这里只就地改 dict，读取一律走访问器或下面的
 # __getattr__ 派生——结构上不存在"可被重绑的标量"，旧缺陷无法复现。
@@ -156,7 +156,6 @@ _PUBLISHED = {
     "ready": None,        # 有新版时的版本号；None=无（控制「下载并更新」菜单可用性）
     "pending_cmd": None,  # 已就绪的一次性替换脚本路径；None=无（控制退出时是否拉起）
 }
-
 
 def __getattr__(name):
     """PEP 562：`UPDATE_READY` / `PENDING_CMD` 由此**派生**，模块里没有这两个全局。
@@ -290,10 +289,10 @@ goto cleanup_keep
 rem Wait limit hit: the old process never exited. Do not replace anything.
 rem Report the MEASURED semantics: polls x ms per tick, plus the nominal budget as a
 rem LOWER BOUND. Wall-clock is strictly larger (PowerShell startup per tick), so printing
-rem a plain "Ns" here would be the exact lie C-33 exists to stop.
+rem a plain "Ns" here would be the exact lie no-ping-as-sleep exists to stop.
 rem The FAILED marker is the ONLY channel that survives this process: the bat runs after
 rem the app has exited, so "write it in the log only" equals "the user never learns the
-rem update did not happen" (1.5.0, F14-1: reme semantics absorbed).
+rem update did not happen" (1.5.0, -1: reme semantics absorbed).
 echo [{stamp}] aborted: {exe} still running after %tries% polls x {tick_ms}ms (nominal budget {budget_s}s, lower bound) >> "%LOG%"
 > "%FAILED%" echo update aborted {stamp}: {exe} still running after %tries% polls x {tick_ms}ms (nominal budget {budget_s}s, lower bound)
 goto cleanup
@@ -311,10 +310,8 @@ del "%POLL%" >nul 2>nul
 (goto) 2>nul & del "%~f0"
 """
 
-
 def _tag_to_version(tag):
     return tag[1:] if tag.startswith("v") else tag
-
 
 def _version_is_newer(latest, current):
     def nums(v):
@@ -324,16 +321,13 @@ def _version_is_newer(latest, current):
     except Exception:
         return False
 
-
 def update_ready():
     """有新版时的版本号，否则 None（**推荐读法**）。"""
     return _PUBLISHED["ready"]
 
-
 def pending_cmd():
     """已就绪的一次性安装脚本路径，否则 None（**推荐读法**）。"""
     return _PUBLISHED["pending_cmd"]
-
 
 def launch_pending_cmd(cmd=None, log=lambda *a: None):
     """在退出收尾处拉起替换脚本，返回是否已拉起。
@@ -356,7 +350,6 @@ def launch_pending_cmd(cmd=None, log=lambda *a: None):
     log("pending update launched:", str(cmd))
     return True
 
-
 def http_error_hint(exc):
     """把 GitHub 的匿名配额拒绝翻成用户能行动的话（403/429），其余情况给空串。
 
@@ -369,7 +362,6 @@ def http_error_hint(exc):
                 "过几分钟再试即可，不是配置问题）")
     return ""
 
-
 def _publish(latest, current_version):
     """把一次成功的检查结果发布到模块状态，返回 newer。
 
@@ -379,7 +371,6 @@ def _publish(latest, current_version):
     newer = bool(latest) and _version_is_newer(latest, current_version)
     _PUBLISHED["ready"] = latest if newer else None
     return newer
-
 
 def check_update(current_version, force=False, repo=None):
     """节流检查。返回 dict(latest/current/newer/error)；网络失败写进 error。
@@ -394,7 +385,7 @@ def check_update(current_version, force=False, repo=None):
                 "newer": _publish(latest, current_version), "error": ""}
     try:
         req = urllib.request.Request(
-            # T4/#32：`repo=` 让**更新源可被调用方覆盖**（l-s2t 的 `config.json:update_repo`
+            # update_helper/#32：`repo=` 让**更新源可被调用方覆盖**（l-s2t 的 `config.json:update_repo`
             # 是运行时可配的，且有三重用户可见支撑：双语 README 承诺、`update_no_repo`
             # 专有文案、build.bat 出厂默认值）。缺省仍走 appconfig 的 `REPO`。
             f"https://api.github.com/repos/{repo or REPO}/releases/latest",
@@ -412,7 +403,6 @@ def check_update(current_version, force=False, repo=None):
         return {"latest": "", "current": current_version, "newer": False,
                 "error": str(exc) + http_error_hint(exc)}
 
-
 def _download(url, dest, timeout=120.0):
     req = urllib.request.Request(url, headers={"User-Agent": APP_ID})
     os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -423,14 +413,12 @@ def _download(url, dest, timeout=120.0):
                 break
             f.write(chunk)
 
-
 def _sha256(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
-
 
 def verify_zip_sha256(zip_path, sha_text):
     """校验下载包，返回 `(ok, 人话)`。**期望值缺失也算失败**——绝不静默放行（reme 口径）。
@@ -446,7 +434,6 @@ def verify_zip_sha256(zip_path, sha_text):
     if wanted != actual:
         return False, f"更新包校验失败：sha256 对不上（期望 {wanted[:12]}…，实际 {actual[:12]}…）"
     return True, ""
-
 
 def build_apply_script(target_dir, stage_dir, work_dir, backup_dir, log_path,
                        limit=UPDATE_WAIT_LIMIT, snapshot_dir=None, failed_marker=None,
@@ -465,8 +452,8 @@ def build_apply_script(target_dir, stage_dir, work_dir, backup_dir, log_path,
     return _APPLY_BAT.format(
         target=target_dir, stage=stage_dir, work=work_dir, backup=backup_dir,
         snapshot=snapshot_dir, failed=failed_marker, log=log_path,
-        # T4/#32：`exe_name=` 是**给测试用的替身口子** —— l-s2t 的 4 处测试刻意渲染
-        # `probe.exe` / `probe.vbs` 而不是真 exe，那是 R1「替身必须存在」纪律在 bat
+        # update_helper/#32：`exe_name=` 是**给测试用的替身口子** —— l-s2t 的 4 处测试刻意渲染
+        # `probe.exe` / `probe.vbs` 而不是真 exe，那是 「替身必须存在」纪律在 bat
         # 渲染层的落实（避免渲染成真 exe 名、被误当真实更新执行）。缺省仍走 `EXE_NAME`。
         exe=(exe_name or EXE_NAME),
         newexe=os.path.join(str(target_dir), (exe_name or EXE_NAME)),
@@ -478,11 +465,9 @@ def build_apply_script(target_dir, stage_dir, work_dir, backup_dir, log_path,
         stamp=time.strftime("%Y-%m-%d %H:%M:%S"),
     )
 
-
 def failed_marker_path(update_dir):
     """失败 marker 的位置：用户在数据区一眼能看到，且与暂存目录分开（暂存会被删）。"""
     return Path(update_dir).parent / FAILED_MARKER_NAME
-
 
 def pop_failed_update_note(update_dir, log=lambda *a: None):
     """读一次"上次更新失败"的 marker，返回人话（无 marker 则空串），并删除 marker。
@@ -490,7 +475,7 @@ def pop_failed_update_note(update_dir, log=lambda *a: None):
     托盘已退出、更新器也自删了，**失败只能等下次启动说**——这是 reme 已验证的可见性机制。
     读取失败不抛（不该拦住启动）。
 
-    **顺序：先算文案 → 先报告 → 最后才删证据**（2026-09-19 修，C-32）。旧写法把
+    **顺序：先算文案 → 先报告 → 最后才删证据**（2026-09-19 修，no-delete-before-report）。旧写法把
     `marker.unlink()` 与 `read_text()` 放在同一个 try 里：`unlink` 抛 OSError（marker 被
     Defender/索引器短暂锁定——本仓库实测过）会走 except 直接 `return ""`，**detail 明明
     已经读到了，用户却看不到升级失败提示**；更糟的是**调用边界上的错误**（arity/签名不符、
@@ -512,7 +497,6 @@ def pop_failed_update_note(update_dir, log=lambda *a: None):
         log("failed-update marker not removed (will report again):", exc)
     return ("上次自动更新失败，已回退到原版本并保留现场；详见 update.log"
             + (f"（{detail}）" if detail else ""))
-
 
 def download_and_prepare(latest, target_dir, update_dir, log=lambda *a: None,
                          backup_dir=None, snapshot_dir=None, repo=None, exe_name=None):
@@ -543,7 +527,7 @@ def download_and_prepare(latest, target_dir, update_dir, log=lambda *a: None,
         names = z.namelist()
         z.extractall(str(update_dir))
     staged = update_dir / stem
-    _exe = exe_name or EXE_NAME       # T4/#32：同 build_apply_script 的替身口子
+    _exe = exe_name or EXE_NAME       # update_helper/#32：同 build_apply_script 的替身口子
     if not (staged / _exe).is_file():
         if any(n == _exe or n.endswith("/" + _exe) for n in names):
             staged = update_dir  # 兜底：扁平 zip
@@ -564,7 +548,6 @@ def download_and_prepare(latest, target_dir, update_dir, log=lambda *a: None,
     _PUBLISHED["pending_cmd"] = str(script)
     log("update staged:", str(staged), "->", str(target_dir), "(bat %s)" % script)
     return str(script)
-
 
 def sweep_stale_update_dirs(max_age=3600.0):
     """清掉更新器遗留在 %TEMP% 的**暂存目录**与**替换脚本**，返回清掉的个数。

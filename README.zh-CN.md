@@ -6,8 +6,8 @@ Windows 托盘工具，用右键菜单管理 DeepSeek Harness 的 `dsh web`：�
 
 未发版（开发期只做本地 commit，版本号只在发版时改）：
 
-- **中英双语界面（T1）**：托盘菜单、通知、弹窗、状态行与错误信息全部走家族模板件 `template/i18n`，`locales/zh.json` 为基准表、`locales/en.json` 缺失键回退中文。偏好区新增 **「语言 / Language」** 项，一键切换并写入 `config.json` 的 `language`（默认 `auto`＝跟随 Windows UI 语言），切换后**立即重建菜单**。路径、服务名、`dsh.cmd` 等数据不参与翻译。
-- **开机自启（G4.1）**：内联注册表代码改为家族模板件 `template/autostart`。打包态优先指向稳定安装位（`%LOCALAPPDATA%\dsh-helper\app\dsh-helper.exe`，存在时），否则退回当前 exe；每次启动都会执行 `migrate_autostart()`，把指向"已消失的 exe"（旧包目录被删）的 Run 键静默修回正确路径。自启状态不再镜像进 `config.json`——注册表是唯一真源（F2-01）。
+- **中英双语界面**：托盘菜单、通知、弹窗、状态行与错误信息全部走家族模板件 `template/i18n`，`locales/zh.json` 为基准表、`locales/en.json` 缺失键回退中文。偏好区新增 **「语言 / Language」** 项，一键切换并写入 `config.json` 的 `language`（默认 `auto`＝跟随 Windows UI 语言），切换后**立即重建菜单**。路径、服务名、`dsh.cmd` 等数据不参与翻译。
+- **开机自启（G4.1）**：内联注册表代码改为家族模板件 `template/autostart`。打包态优先指向稳定安装位（`%LOCALAPPDATA%\dsh-helper\app\dsh-helper.exe`，存在时），否则退回当前 exe；每次启动都会执行 `migrate_autostart()`，把指向"已消失的 exe"（旧包目录被删）的 Run 键静默修回正确路径。自启状态不再镜像进 `config.json`——注册表是唯一真源（数据·单一真源）。
 
 1.7.0 起的补充能力：
 
@@ -73,7 +73,7 @@ Windows 托盘工具，用右键菜单管理 DeepSeek Harness 的 `dsh web`：�
 }
 ```
 
-自启状态**不在这里**：唯一真源是 `HKCU\...\Run\dsh-helper` 注册表值（F2-01）。`quit_stop_dsh` 是"退出时同时关闭 dsh"勾选项的持久化值（默认不勾）。`language` 取 `auto`（跟随 Windows UI 语言）/ `zh` / `en`，由「语言 / Language」菜单写入。
+自启状态**不在这里**：唯一真源是 `HKCU\...\Run\dsh-helper` 注册表值（数据·单一真源）。`quit_stop_dsh` 是"退出时同时关闭 dsh"勾选项的持久化值（默认不勾）。`language` 取 `auto`（跟随 Windows UI 语言）/ `zh` / `en`，由「语言 / Language」菜单写入。
 
 `port` 默认 `3080`（dsh web 官方兜底端口，与 VS Code 扩展默认值一致）。设为具体端口时，启动前会先探测该端口：可用则固定使用；**已被占用时本次自动改用空闲端口**，并在系统通知与日志中说明原因。设为 `0` 表示不使用固定端口，每次都由 dsh/操作系统选择空闲端口。不要选在 Windows 动态端口段（默认 49152–65535）内，否则可能被系统临时端口随机占用。
 
@@ -97,15 +97,15 @@ build.bat nopause
 
 ## 未启用能力 / 已知缺口
 
-按 §I-10 逐条注明未触发能力及原因：
+按 §落地·交付自查 逐条注明未触发能力及原因：
 
-- **稳定安装位（§G4.1-1）—— 只做了"优先指向"，机制本身仍未实现**：`paths.INSTALL_DIR`/`INSTALL_EXE`（`%LOCALAPPDATA%\dsh-helper\app\`）已定义、自启也优先指向它，但没有任何流程把版本装进稳定位（更新器仍是原地替换当前包）。在今天这台机器这种"稳定位不存在"的常态下，`get_autostart_cmd()` 会退回**带版本号**的 `release\dsh-helper-<版本>\dsh-helper.exe`——该目录一变/被删，Run 键仍会暂时指向失效路径，直到下次启动自愈。完整 G4.1-1（更新器把版本装进稳定位）仍是待办。
-- **i18n 覆盖（§T1）—— 已实现，附具名残留**：模块已采纳，`--lang-audit` 对 `src/main.py` 报 0 条表外中文，本工具全部菜单/通知/弹窗/状态行/校验与错误信息均已翻译。残留：审计只扫 `src/main.py`，其他文件产出的文案（如 `tray_kit` 在未传参时自带的对话框中文、Python/Tk 异常串）不在覆盖内；未走 `i18n.t()` 的一律回落中文——如实登记，不假装全覆盖。
-- **设置窗口（§T3）**：偏好项（自启、启动时启动、刷新间隔、退出清理）只存在于托盘菜单，没有统一设置对话框。
+- **稳定安装位（§稳定安装位自启-1）—— 只做了"优先指向"，机制本身仍未实现**：`paths.INSTALL_DIR`/`INSTALL_EXE`（`%LOCALAPPDATA%\dsh-helper\app\`）已定义、自启也优先指向它，但没有任何流程把版本装进稳定位（更新器仍是原地替换当前包）。在今天这台机器这种"稳定位不存在"的常态下，`get_autostart_cmd()` 会退回**带版本号**的 `release\dsh-helper-<版本>\dsh-helper.exe`——该目录一变/被删，Run 键仍会暂时指向失效路径，直到下次启动自愈。完整 §稳定安装位自启-1（更新器把版本装进稳定位）仍是待办。
+- **i18n 覆盖（§触发式能力·中英双语 i18n）—— 已实现，附具名残留**：模块已采纳，`--lang-audit` 对 `src/main.py` 报 0 条表外中文，本工具全部菜单/通知/弹窗/状态行/校验与错误信息均已翻译。残留：审计只扫 `src/main.py`，其他文件产出的文案（如 `tray_kit` 在未传参时自带的对话框中文、Python/Tk 异常串）不在覆盖内；未走 `i18n.t()` 的一律回落中文——如实登记，不假装全覆盖。
+- **设置窗口（§触发式能力·设置窗口）**：偏好项（自启、启动时启动、刷新间隔、退出清理）只存在于托盘菜单，没有统一设置对话框。
 - **`release.bat`**：不存在。`tests/` 已存在（2026-09-19）——`tests/test_*.py` 覆盖单实例守卫、真实启动路径、语言切换菜单刷新、更新链、UI 封送与退出 fail-open 路径，且 `build.bat` 把**每一个**都当门禁跑，冻结的 `--smoke` 不再是唯一业务检查。
-- **更新 pending 幂等（§G4-02）**：`paths.process_pending_update()` 已存在但未接入启动流程，中断的换装不会重试。
-- **`service_link`（§G4.2 参考状态机）**：模板已提供 `template/service_link`（NONE → ADOPTED/OWNED → NONE），dsh-helper 仍是内联实现接入与停止。行为通过评审，但未采纳共享状态机。
-- **退出路径 fail-open（§G4.1-4 / T7）—— 过渡版内联形态，待吸收模板件**：弹窗链路不可用时（`Tk()` 抛 `TclError`，例如 `_internal/` 被掏空），`quit_menu` 记一行日志后按 `quit_stop_dsh=False` 照常退出，不再静默拒绝退出。它**刻意**是 `quit_menu` 内的本地三态裁决；义务是待 `tray_kit` 提供统一形态后改为调用共享件（见 CHANGELOG `## Unreleased`）。
+- **更新 pending 幂等**：`paths.process_pending_update()` 已存在但未接入启动流程，中断的换装不会重试。
+- **`service_link`（§服务唯一性 参考状态机）**：模板已提供 `template/service_link`（NONE → ADOPTED/OWNED → NONE），dsh-helper 仍是内联实现接入与停止。行为通过评审，但未采纳共享状态机。
+- **退出路径 fail-open（§稳定安装位自启-4 / tray_kit）—— 过渡版内联形态，待吸收模板件**：弹窗链路不可用时（`Tk()` 抛 `TclError`，例如 `_internal/` 被掏空），`quit_menu` 记一行日志后按 `quit_stop_dsh=False` 照常退出，不再静默拒绝退出。它**刻意**是 `quit_menu` 内的本地三态裁决；义务是待 `tray_kit` 提供统一形态后改为调用共享件（见 CHANGELOG `## Unreleased`）。
 
 ## 常见问题
 

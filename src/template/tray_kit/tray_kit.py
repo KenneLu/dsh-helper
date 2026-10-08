@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 # TEMPLATE-FROM: my-diy-tool-template/template/tray_kit/tray_kit.py | TEMPLATE-VER: 2.3.0
-"""T7｜托盘机制件：单实例互斥体、退出请求文件 + 监视循环、面板地址行掩码、菜单签名重画（含 menu_is_open 探测器）、退出确认框（2.0.0）。
+"""tray_kit｜托盘机制件：单实例互斥体、退出请求文件 + 监视循环、面板地址行掩码、菜单签名重画（含 menu_is_open 探测器）、退出确认框（2.0.0）。
 
-2.3.0（W7 Decision 9）：**menu_is_open 下沉**——MenuSignature 的配套探测器
+2.3.0：**menu_is_open 下沉**——MenuSignature 的配套探测器
 （GUI_INMENUMODE 遍历本进程线程 + 前台窗口 #32768 兜底）此前在四工具各内联
 约 40 行、近乎逐行重复，正本化进模板。调用方改为
 `MenuSignature(rebuild, menu_is_open=tray_kit.menu_is_open, …)`，各删约 40 行。
@@ -14,15 +14,15 @@
 
 2.1.0：新增 **`mutex_name_is_valid(app_id, mutex_name=None)`** —— 冒烟用的**守卫覆盖探针**
 （名字合法性，不占锁、不弹窗）。来源：local-speak2text 内联版（其"守卫坏了 3 个月而构建全绿"
-的根因修复），按 D3.1 提升为公共件，让四工具一次性解决 C-10。
+的根因修复），按 D3.1 提升为公共件，让四工具一次性解决 smoke-no-bypass-startup。
 
 2.0.2：`confirm_quit_dialog` / `warn_duplicate_instance` 的用户可见文案参数化
-（中文为默认值，向后兼容），满足 E4-02「词表覆盖全部用户可见文案」；
+（中文为默认值，向后兼容），满足 「词表覆盖全部用户可见文案」；
 `checkbox_text` 为空/None 时不再渲染空勾选框。
 
-蓝本：reme-helper（三循环/签名重画/退出纪律，执行文档 F13/D13/D14）与
+蓝本：reme-helper（三循环/签名重画/退出纪律）与
 local-speak2text（单实例/退出请求文件）。纯函数库：不依赖具体工具，导入即用。
-设置窗口/主题等大件属二期（D3），不在此文件。
+设置窗口/主题等大件属二期预留，不在此文件。
 """
 import ctypes
 import os
@@ -33,16 +33,14 @@ from ctypes import wintypes
 ERROR_ALREADY_EXISTS = 183
 _MUTEX_HANDLE = None
 
-
 def _derive_mutex_name(app_id, mutex_name=None):
     """实际要用的互斥体名（**单一派生口径**，守卫与探针都从这里取）。"""
     return mutex_name if mutex_name is not None else f"Local\\{app_id}-single-instance"
 
-
 def mutex_name_ok(name):
     """名字**形状**是否合法——纯字符串判定，不碰内核。**守卫与探针共用这一段**。
 
-    规则（SINGLE-01 的根因，全家族只此一份判据）：
+    规则（单实例·互斥体名合法的根因，全家族只此一份判据）：
       * 必须是**非空字符串**（`None` / `""` / 非 `str` 一律不合法）；
       * 必须以 `Local\\` 起头；
       * 前缀之后**不得再出现反斜杠**——命名内核对象只允许一个分隔符，第二个会让
@@ -53,7 +51,6 @@ def mutex_name_ok(name):
         return False
     rest = name[len("Local\\"):]
     return bool(rest) and "\\" not in rest
-
 
 def acquire_single_instance(app_id, mutex_name=None, log=print):
     """命名互斥体钉死进程数为 1。返回 False = 已有实例。守卫自身失败时放行。"""
@@ -83,7 +80,6 @@ def acquire_single_instance(app_id, mutex_name=None, log=print):
         log(f"single-instance guard unavailable ({exc}); continuing")
         return True
 
-
 def single_instance_free(mutex_name):
     """探测互斥体当前是否空着，**不持有**它（reme-helper 语义，1.0.1 沉淀）。
 
@@ -105,7 +101,6 @@ def single_instance_free(mutex_name):
     k32.CloseHandle(handle)
     return not already
 
-
 def mutex_name_is_valid(app_id, mutex_name=None):
     """探针：这个名字**形状合法且内核收得下**（`--smoke` 的守卫覆盖用）。返回 True/False。
 
@@ -121,7 +116,7 @@ def mutex_name_is_valid(app_id, mutex_name=None):
 
     为什么冒烟要用探针而不是真跑守卫（D3.3）：真跑守卫遇到用户常驻实例会走"重复启动"
     分支 → `warn_duplicate_instance()` 弹**模态**对话框 → **无人值守的构建被挂死**
-    （比失败更糟：CI 卡住而不是变红）。而冒烟真正要打的故障是**名字非法**（SINGLE-01）。
+    （比失败更糟：CI 卡住而不是变红）。而冒烟真正要打的故障是**名字非法**（单实例·互斥体名合法）。
 
     失败方向与守卫一致：非 Windows 或内核不可用 ⇒ **放行**（宁可漏判，不可把工具判死）。
     """
@@ -143,11 +138,10 @@ def mutex_name_is_valid(app_id, mutex_name=None):
     except Exception:
         return True
 
-
 def confirm_quit_dialog(app_name, checkbox_text=None, checked_init=False,
                         parent=None, on_change=None, *, title=None, body_text=None,
                         confirm_text="退出", cancel_text="取消"):
-    """退出确认 + 清理勾选对话框（G4.1 条款 4 / G4.2 条款 5；交互形态 = reme-helper 蓝本）。
+    """退出确认 + 清理勾选对话框。
 
     形态（家族标准，勿各自发挥）：标题 = title 或 app_name；正文默认「确定退出
     <app_name>？勾选项会记住，下次退出沿用。」（无勾选项时为「确定退出 <app_name>？」）；
@@ -160,7 +154,7 @@ def confirm_quit_dialog(app_name, checkbox_text=None, checked_init=False,
     on_change(bool)：勾选状态一变即回调（2026-09-18 用户定：持久化跟随勾选动作，
     不等「退出」点击——点取消也已留存）。调用方在此落盘。
 
-    2.0.2（E4-02）：本函数是纯机制件，**不得硬编码用户可见文案**——启用 i18n 的工具
+    2.0.2：本函数是纯机制件，**不得硬编码用户可见文案**——启用 i18n 的工具
     经 title/body_text/confirm_text/cancel_text 传入 t() 词条；不传则用中文默认值，
     老调用点行为不变。checkbox_text 为空/None 时不再渲染空勾选框（l-s2t 形态）。
     返回 {"go": bool, "stop_service": bool}；**取消 = {"go": False, ...}，永不返回 None**
@@ -230,12 +224,11 @@ def confirm_quit_dialog(app_name, checkbox_text=None, checked_init=False,
     # 删掉它是**行为不变**的（helpers-dev 当场逐路径证过）。契约见 docstring：永不 None。
     return result
 
-
 def warn_duplicate_instance(app_name, hint="请看任务栏右下角通知区域里的图标。",
                             message=None, title=None):
     """无 console 托盘程序的重复启动提示：print 没人看得见，用弹窗。
 
-    2.0.2（E4-02）：文案可整体经 message/title 传入（i18n 工具传 t() 词条）；
+    2.0.2：文案可整体经 message/title 传入（i18n 工具传 t() 词条）；
     不传则用中文默认值，老调用点行为不变。
     """
     text = message if message is not None else (
@@ -245,15 +238,13 @@ def warn_duplicate_instance(app_name, hint="请看任务栏右下角通知区域
     except Exception:
         pass
 
-
 def make_quit_request_path(user_data_dir):
     """--quit 的请求文件：`<app> --quit` 写它，运行中的实例由 quit_watch_loop 消费。
 
-    ⚠ 纪律（F11/D12）：测试与工具链实例必须用重定向后的独立数据区，
+    ⚠ 纪律：测试与工具链实例必须用重定向后的独立数据区，
     否则会把用户的常驻实例一起退出。
     """
     return user_data_dir / "quit.request"
-
 
 def quit_watch_loop(stop_event, quit_request_path, on_quit, log=print, beat=1.0):
     """1 秒拍监视退出请求文件；发现即删除并回调 on_quit（走与托盘退出同一条清理路径）。"""
@@ -271,16 +262,13 @@ def quit_watch_loop(stop_event, quit_request_path, on_quit, log=print, beat=1.0)
         on_quit()
         return
 
-
 def mask_token(url, keep="••••••"):
-    """D11：菜单展示用 token 全掩码——知道有 token 但看不到内容；完整地址走「复制面板地址」。"""
+    """菜单展示用 token 全掩码——知道有 token 但看不到内容；完整地址走「复制面板地址」。"""
     if not url:
         return url
     return re.sub(r"([?&])token=[^&]*", lambda m: m.group(1) + "token=" + keep, url)
 
-
 _GUI_INMENUMODE = 0x00000004
-
 
 def menu_is_open():
     """系统弹出菜单是否正开着（MenuSignature 的配套探测器，2.3.0 下沉）。
@@ -327,7 +315,6 @@ def menu_is_open():
         return False
     except Exception:
         return False
-
 
 class MenuSignature:
     """签名重画：把「会显示出来的状态」提成一个 tuple，只有签名变了才重建菜单句柄，

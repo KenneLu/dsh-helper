@@ -31,11 +31,9 @@ from template.appconfig import APP_ID, ICON_ASSET as ICON_ASSET_REL   # noqa: E4
 
 APP_NAME = "dsh-helper"
 VERSION = "1.8.2"
-# 程序本体目录**不在本文件派生**：唯一出处是 T2 paths 的 APP_DIR（打包后 = exe 所在
-# 目录，开发态 = 仓库根）。这里曾另有一份同名派生量（开发态 = src/），与 paths 分叉，
-# 只在冻结态碰巧重合——于是 dev 下 ICON_ASSET 解析成 src/resources/img/… 取不到，
-# _load_icon_base() 静默走兜底图，而构建与冒烟全绿。
-# 用户数据区/配置/日志/更新暂存同样出自 T2 paths（数据区住 LOCALAPPDATA，
+# 程序本体目录**不在本文件派生**：唯一出处是 paths 的 APP_DIR（打包后 = exe 所在
+# 目录，开发态 = 仓库根）。
+# 用户数据区/配置/日志/更新暂存同样出自 paths（数据区住 LOCALAPPDATA，
 # 1.6 及以前的 exe 旁旧配置由播种自动迁入）。
 from template.paths import (APP_DIR, CONFIG_PATH, LEGACY_CONFIG_PATH, LOG_DIR, LOG_PATH,
                            UPDATE_DIR, USER_DATA_DIR)
@@ -107,14 +105,14 @@ DEFAULT_CONFIG = {
     "port": DEFAULT_PORT,
     "status_refresh_interval_sec": DEFAULT_STATUS_REFRESH_INTERVAL_SEC,
     "start_on_launch": False,
-    # 自启状态不落 config（F2-01 单一真源 = HKCU Run）：注册表是唯一出处，
+    # 自启状态不落 config（数据·单一真源 = HKCU Run）：注册表是唯一出处，
     # 托盘勾选直接读注册表，见 template/autostart。
     # G4.2 条款 5：退出清理勾选，持久化、默认不勾——不勾 = dsh 服务放行继续运行
     "quit_stop_dsh": False,
 }
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
-_logger = log_kit.get_logger(LOG_DIR)   # T12：滚动 1MB×3（house 标准 D13）
+_logger = log_kit.get_logger(LOG_DIR)   # 滚动 1MB×3（家族标准）
 
 
 def log(*parts):
@@ -129,7 +127,7 @@ def log(*parts):
 
 
 def load_config():
-    paths.seed_config()   # T2：exe 旁旧配置一次性迁入用户数据区
+    paths.seed_config()   # exe 旁旧配置一次性迁入用户数据区
     config = {}
     if CONFIG_PATH.exists():
         try:
@@ -155,12 +153,12 @@ def load_config():
         merged["status_refresh_interval_sec"] = DEFAULT_STATUS_REFRESH_INTERVAL_SEC
     merged["start_on_launch"] = bool(merged.get("start_on_launch", False))
     # 旧版遗留的 "autostart" 键不再读取（真源=注册表）；不主动删除以免破坏用户文件，
-    # 下次 save_config 落盘时自然消失（F2-01）。
+    # 下次 save_config 落盘时自然消失（数据·单一真源）。
     return merged
 
 
 CFG = load_config()
-# T5：语言在配置读取之后、任何 t() 之前初始化（auto 跟随 Windows UI 语言）。
+# 语言在配置读取之后、任何 t() 之前初始化（auto 跟随 Windows UI 语言）。
 i18n.init(i18n.load_language_from_config(CONFIG_PATH))
 
 
@@ -899,15 +897,15 @@ def notify(message):
             log(f"notify failed: {exc}")
 
 
-# ---- E2-09：签名重画 + 菜单占用探测 -----------------------------------------
+# ---- ：签名重画 + 菜单占用探测 -----------------------------------------
 # 旧形态每拍无条件 icon.update_menu()，而 pystray 的重建是 DestroyMenu + CreatePopupMenu：
 # 菜单正开着时重建 = 把它从用户手底下抽走（鼠标滑着滑着突然失焦）。改成：
 #   状态提成签名 → 只有签名变了才重建 → 菜单开着时推迟，由 1.5s 补画拍补上。
-# menu_is_open 探测器已随 tray_kit 2.3.0 下沉模板（W7 Decision 9），此处不再内联。
+# menu_is_open 探测器已随 tray_kit 2.3.0 下沉模板，此处不再内联。
 
 
 def _menu_signature():
-    """菜单上会「显示出来」的全部状态：只有它变了才值得重建（E2-09/§D6）。
+    """菜单上会「显示出来」的全部状态：只有它变了才值得重建（§状态唯一写入点）。
 
     **漏一项 = 那一项变了菜单不刷新**。逐项对照 build_menu()：
       · 信息行 status_line()   ← phase / command_status / managed / message / pid
@@ -964,7 +962,7 @@ def menu_refresh_loop():
             log(f"menu refresh failed: {exc}")
 
 
-# ---- E1-03 / I-03：UI 队列封送 -------------------------------------------------
+# ---- / 落地·入口骨架：UI 队列封送 -------------------------------------------------
 # tkinter 不是线程安全的。此前「选择 dsh.cmd」是在 threading.Thread 里直接 tk.Tk() 的
 # （为了不阻塞托盘），等于**在工作线程里建/毁一个 Tk 解释器**——换一个 CPython/_tkinter
 # 构建就可能崩，任何跨线程共享都会踩解释器状态。
@@ -983,7 +981,7 @@ def ui_thread_loop():
 
 
 def ui_post(fn):
-    """把 UI 工作封送到唯一的 Tk 线程执行，阻塞取回结果（E1-03/I-03）。
+    """把 UI 工作封送到唯一的 Tk 线程执行，阻塞取回结果（落地·入口骨架）。
 
     线程**按需启动**：main() 会先起一个，但测试/诊断路径可能不经过 main()——
     那时若只 put 不等执行，就会永久卡在 done.wait()（实测踩到：test_update_chain
@@ -1038,7 +1036,7 @@ def status_line():
 
 
 def display_url(url):
-    """菜单展示用：token 全掩码（T7/D11）。完整地址唯一入口 = 复制面板地址。"""
+    """菜单展示用：token 全掩码。完整地址唯一入口 = 复制面板地址。"""
     return tray_kit.mask_token(url)
 
 
@@ -1076,7 +1074,7 @@ def open_panel(_icon, _item):
 
 def copy_panel_url(_icon, _item):
     refresh_state()
-    # 剪贴板要临时建一个 Tk 根 → 同样封送到 Tk 线程（E1-03/I-03）。
+    # 剪贴板要临时建一个 Tk 根 → 同样封送到 Tk 线程（落地·入口骨架）。
     ui_post(lambda: copy_to_clipboard(state_copy().get("url", "")))
 
 
@@ -1129,7 +1127,7 @@ def rescan_menu(_icon, _item):
 
 
 def choose_dsh_command_menu(_icon, _item):
-    # 对话框里有 tk.Tk()：必须走 ui_post 封送到唯一的 Tk 线程（E1-03/I-03）。
+    # 对话框里有 tk.Tk()：必须走 ui_post 封送到唯一的 Tk 线程（落地·入口骨架）。
     # 仍然另起线程，是为了不让托盘在等用户选文件的这几秒里失去响应。
     threading.Thread(
         target=ui_post,
@@ -1333,8 +1331,8 @@ def open_config(_icon, _item):
     os.startfile(str(CONFIG_PATH))  # noqa: S606
 
 
-# 自启三件套（含稳定位指向与启动自愈）全部来自 T3 模板件 template/autostart；
-# main.py 只保留托盘开关的 UI 反馈。F2-01：状态真源 = HKCU Run，不再双写 config。
+# 自启三件套（含稳定位指向与启动自愈）全部来自模板件 template/autostart；
+# main.py 只保留托盘开关的 UI 反馈。数据·单一真源：状态真源 = HKCU Run，不再双写 config。
 
 
 def toggle_autostart(_icon, _item):
@@ -1355,7 +1353,7 @@ def toggle_start_on_launch(_icon, _item):
 
 
 def toggle_language(_icon, _item):
-    """中英切换（T1）：改语言 → 持久化 → 显式重建菜单（D14）。"""
+    """中英切换：改语言 → 持久化 → 显式重建菜单。"""
     new_lang = "en" if i18n.current_lang() == "zh" else "zh"
     i18n.init(new_lang)
     i18n.save_language_to_config(CONFIG_PATH, new_lang)
@@ -1390,7 +1388,7 @@ def quit_menu(icon, _item):
                 CFG["quit_stop_dsh"] = bool(value)
                 save_config()
 
-            # 确认框要建 Tk 根 → 封送到唯一的 Tk 线程（E1-03/I-03）。
+            # 确认框要建 Tk 根 → 封送到唯一的 Tk 线程（落地·入口骨架）。
             # 降级链两级都在里面跑：富对话框失败就走原生 askyesno（同样在那一个线程上）。
             def _confirm():
                 try:
@@ -1517,13 +1515,13 @@ def download_update_menu(_icon=None, _item=None):
 
 
 def build_menu():
-    """house 标准八段式（执行文档 D14）：信息 → 更新 → 默认入口 → 服务控制 → 业务 → 打开 → 偏好 → 退出。"""
+    """家族标准八段式：信息 → 更新 → 默认入口 → 服务控制 → 业务 → 打开 → 偏好 → 退出。"""
     return pystray.Menu(
         # ① 信息区（只读）
         pystray.MenuItem(lambda _item: f"{APP_NAME} v{VERSION}", None, enabled=False),
         pystray.MenuItem(lambda _item: status_line(), None, enabled=False),
         pystray.MenuItem(lambda _item: url_line(), None, enabled=False),
-        # D11：复制紧贴地址行，是获取完整 URL（含 token）的唯一入口
+        #复制紧贴地址行，是获取完整 URL（含 token）的唯一入口
         pystray.MenuItem(i18n.t("menu_copy_url"), copy_panel_url, enabled=lambda _item: has_url()),
         pystray.Menu.SEPARATOR,
         # ② 更新区
@@ -1567,7 +1565,7 @@ def build_menu():
 def smoke():
     """构建冒烟测试：验证依赖、配置、守卫探针和 dsh 命令发现，不启动常驻服务。"""
     try:
-        # D3.1 / C-10 守卫覆盖探针：名字合法性（不占锁、不弹窗）。守卫坏了 3 个月
+        # D3.1 / 判据·smoke不绕 守卫覆盖探针：名字合法性（不占锁、不弹窗）。守卫坏了 3 个月
         # 而构建全绿的根因就是探针缺失——冒烟必须与运行期守卫问同一个名字。
         if not tray_kit.mutex_name_is_valid(APP_ID):
             raise RuntimeError("mutex name is illegal for %s" % APP_ID)
@@ -1594,7 +1592,7 @@ def smoke():
 
 
 def lang_audit():
-    """T5/T1 自检（--lang-audit）：静态扫描本文件里未进 zh 词表的中文串。
+    """自检（--lang-audit）：静态扫描本文件里未进 zh 词表的中文串。
 
     只查字面量（docstring 除外），命中即列出行号；退出码非 0 = 有遗漏，
     便于接进门禁。数据/标识符本就不该进词表，故只在 src/main.py 上跑。
@@ -1639,7 +1637,7 @@ def lang_audit():
     return 1 if missing else 0
 
 
-# ---- 单实例：命名互斥体（T7 tray_kit；名字不含版本号，跨版本互拦） ----------
+# ---- 单实例：命名互斥体（tray_kit；名字不含版本号，跨版本互拦） ----------
 # 旧行为是每双击一次就多一个托盘图标：多个图标各自监控同一台 dsh，状态互相矛盾，
 # 而且每个实例的「退出」都会先停 dsh。互斥体由内核管理，进程消失即自动释放。
 
@@ -1654,12 +1652,12 @@ def main():
                                   i18n.t("dup_hint")]))
         return
     log(f"startup {APP_NAME} v{VERSION} (pid {os.getpid()})")
-    # C-38（§4.1.38 的**唯一正本样例**，勿自创变体）：`startup` 行之后紧跟两行
+    # 判据·启动自证（§4.1.38 的**唯一正本样例**，勿自创变体）：`startup` 行之后紧跟两行
     # **解析后**的数据根与配置路径。为什么值得：`python -c` / heredoc 探针**不落盘**，
     # 源码扫描原理上覆盖不到它们；能定死归属的只有**产物自带的这行日志**。
     log("data root: %s" % USER_DATA_DIR)
     log("config   : %s" % CONFIG_PATH)
-    # T2/C-2（paths 1.1.4，MUST-WIRE）：让"本实例的 exe 不可被删除/改名"由**内核**保证，
+    # exe-delete-guard（paths 1.1.4，MUST-WIRE）：让"本实例的 exe 不可被删除/改名"由**内核**保证，
     # 而不是由纪律保证。持有的是一个**不含 FILE_SHARE_DELETE** 的句柄 ⇒ 删除方（构建脚本 /
     # 手工 `rm -r` / 未来的 --clean）会**大声失败**，而不是把正在运行的实例目录静默掏空
     # （2026-09-19 事故的形态：实例仍在其中运行时 release\<工具>-<版本>\ 被掏空）。
@@ -1670,16 +1668,16 @@ def main():
     # G4.1 条款 3/5：启动自愈——存量 Run 键指向的 exe 已消失（换版本目录被删）时，
     # 静默重写到当前正确位置（优先稳定安装位 INSTALL_EXE，见 template/autostart）。
     autostart.migrate_autostart(log=log)
-    # T4 收尾：更新脚本在托盘退出后才跑，要是被打断（重启/被杀/半路消失），那份解压好的
+    # 收尾：更新脚本在托盘退出后才跑，要是被打断（重启/被杀/半路消失），那份解压好的
     # 整包（实测 ~50MB/次）就烂在 %TEMP% 里没人知道——启动扫一次。只清一小时前的：
     # 正在进行的更新，其暂存目录是刚建的。清扫失败不抛，拦不住启动。
     swept = update_helper.sweep_stale_update_dirs()
     if swept:
         log(f"update housekeeping: swept {swept} stale update dir(s) from TEMP")
-    # T4 收尾：上次更新失败的通知也只能等下次启动说（更新脚本自删了）。marker 读一次即删，
+    # 收尾：上次更新失败的通知也只能等下次启动说（更新脚本自删了）。marker 读一次即删，
     # 所以先取出来；托盘还没建、通知发不出去，先留在闭包里，到 setup_tray 再发。
     # 模板返回的是中文人话串（详情它已自己写进 update.log），这里只取"失败过"这个事实，
-    # 文案走 i18n，否则英文界面会弹出一句中文（T1 回归）。
+    # 文案走 i18n，否则英文界面会弹出一句中文。
     failed_note = update_helper.pop_failed_update_note(UPDATE_DIR, log=log)
     needs_command_detection = command_needs_startup_detection()
     set_state(
@@ -1697,9 +1695,9 @@ def main():
     )
     tray_icons.tray_icons.bind(TRAY_ICON, "stopped")
     threading.Thread(target=monitor_loop, name="dsh-monitor", daemon=True).start()
-    # E2-09 第②拍：菜单开着时被推迟的重画在这里补上（状态刷新间隔最长 600s，不能靠它）。
+    # 第②拍：菜单开着时被推迟的重画在这里补上（状态刷新间隔最长 600s，不能靠它）。
     threading.Thread(target=menu_refresh_loop, name="dsh-menu-refresh", daemon=True).start()
-    # E1-03/I-03：唯一的 Tk 线程，所有对话框/剪贴板都投给它（tkinter 非线程安全）。
+    # /落地·入口骨架：唯一的 Tk 线程，所有对话框/剪贴板都投给它（tkinter 非线程安全）。
     # 这里先起一个；ui_post() 也会按需懒启动，覆盖不经过 main() 的路径。
     ui_post(lambda: None)
 

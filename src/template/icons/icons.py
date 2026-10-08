@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 # TEMPLATE-FROM: my-diy-tool-template/template/icons/icons.py | TEMPLATE-VER: 2.1.0
-# 2.1.0（W6，Decision 6）：**构建工具化 + 状态帧生成**——新增 make_state_icons：
+# 2.1.0：**构建工具化 + 状态帧生成**——新增 make_state_icons：
 #   工具经 appconfig 提供 ICON_STATE_ARTISTS（状态绘制器表，key=状态名，callable
 #   (base256)->Image256），构建期产 resources/icons/<state>/<size>.png 全套帧；
-#   运行时由 tray_icons（T6b）加载，包内零绘制代码。旧 make_icons（exe/taskbar
+#   运行时由 tray_icons 加载，包内零绘制代码。旧 make_icons（exe/taskbar
 #   ico）保留不变——exe 图标仍是单形态多帧 ico。
-# 2.0.1（W1 改名过渡）：模块互引改双式导入（try modules. / except template.）；W1 收尾步统一。
-"""T6｜图标构建工具（G5 + W6 静态化）：构建期生成，仓库里不进二进制图标资源。
+# 2.0.1：模块互引改双式导入（try modules. / except template.）；收尾步统一。
+"""icons｜图标构建工具：构建期生成，仓库里不进二进制图标资源。
 
 图形来源二选一（不变）：
   ICON_DRAW(size)  -> PIL.Image   纯代码画（推荐；参考 l-s2t draw_mic）
@@ -16,11 +16,11 @@
   exe/taskbar ico（make_icons，2.0.0 语义不变）：
     <APP_ID>.ico / <APP_ID>-taskbar.ico
   **状态帧目录**（make_state_icons，2.1.0 新）：
-    resources/icons/<state>/<size>.png —— tray_icons 运行时按档加载（F25：状态
+    resources/icons/<state>/<size>.png —— tray_icons 运行时按档加载（状态
     角标 resize 会偏移，必须按档存帧）。状态集 = appconfig 的 ICON_STATE_ARTISTS
     键集 + "default"（恒有，恒用 base 原图）。
 
-方案开关（Decision 6）：A 指定现成图标 = ICON_ASSET 路线（资产直派生）；
+方案开关：A 指定现成图标 = ICON_ASSET 路线（资产直派生）；
 B 软件生成 = ICON_DRAW + ICON_STATE_ARTISTS 路线。两套并存，当前四工具均 B。
 
 build.bat 接入：GATE `python src\\modules\\icons\\icons.py` -> 状态帧落
@@ -45,13 +45,11 @@ TASKBAR_SIZES = (16, 20, 24, 28, 30, 32, 36, 40, 42, 48, 56, 64, 96, 128, 256)
 # 状态帧运行档（tray_icons.TRAY_FRAMES 同源；256 档只进 ico 不进贴图目录）
 STATE_SIZES = (16, 24, 32, 48, 64)
 
-
 def state_keys():
     """状态全集：ICON_STATE_ARTISTS 键集 ∪ {default}。default 恒在（兜底帧）。"""
     keys = set(ICON_STATE_ARTISTS or {})
     keys.add("default")
     return sorted(keys)
-
 
 def base_image():
     """图形来源二选一：ICON_ASSET 派生（统一 256 基图）优先，否则 ICON_DRAW(256)。"""
@@ -68,8 +66,7 @@ def base_image():
         return img.resize((256, 256), Image.LANCZOS)
     if ICON_DRAW:
         return ICON_DRAW(256)
-    raise RuntimeError("appconfig must provide ICON_DRAW or ICON_ASSET (G5)")
-
+    raise RuntimeError("appconfig must provide ICON_DRAW or ICON_ASSET ()")
 
 def make_icons(base_dir):
     """在 base_dir 下生成托盘态与任务栏态两个 ico，返回 (托盘, 任务栏) 路径。"""
@@ -79,7 +76,6 @@ def make_icons(base_dir):
     img.save(tray_path, sizes=[(s, s) for s in TRAY_SIZES])
     img.save(taskbar_path, sizes=[(s, s) for s in TASKBAR_SIZES])
     return tray_path, taskbar_path
-
 
 def make_state_icons(base_dir):
     """在 base_dir/resources/icons/ 下生成全套状态帧，返回 {state: [files]}。
@@ -105,7 +101,6 @@ def make_state_icons(base_dir):
             files.append(str(f))
         out[state] = files
     return out
-
 
 if __name__ == "__main__":
     # dev 态 ico 落仓库根：向上找 main.py 所在的 src/，其父级即根（与模块深度无关）

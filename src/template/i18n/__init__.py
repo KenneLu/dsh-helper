@@ -31,7 +31,6 @@ __all__ = [
     "load_language_from_config", "load_tables", "save_language_to_config", "t",
 ]
 
-
 def __getattr__(name):
     """PEP 562：包命名空间查不到的名字（`LANG`/`TABLES`/…）每次读取取子模块真值。"""
     try:

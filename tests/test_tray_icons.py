@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tray_icons 静态贴图断言（W6）：状态定义 == 资产目录 + 帧在位 + 加载回退。
+"""tray_icons 静态贴图断言：状态定义 == 资产目录 + 帧在位 + 加载回退。
 （与 l-s2t 同款；dsh 状态集 = {running, stopped} + default 兜底。）"""
 import sys
 from pathlib import Path

@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
 # TEMPLATE-FROM: my-diy-tool-template/template/i18n/i18n.py | TEMPLATE-VER: 2.3.0
-# 2.3.0（W3 前段定稿，Decision 5，用户 2026-09-27 拍板）：轻形态为**唯一家族形态**
+# 2.3.0：轻形态为**唯一家族形态**
 #   （判据：扩展性最强——加语言只加 locales/<lang>.json；可读性由 zh 基准表保底；
 #   配置时只改数据文件）。reme-helper 的重形态（中文即键 + pairs.json）自本版起为
-#   **过渡 grandfather**，W3 后段（851 词条迁移）完成后移除；§E4 双形态许可同步收窄。
-"""T5 · i18n v2 —— 机制与词表分离（数据驱动，蓝本 local-speak2text/i18n.py）。
+#   **过渡 grandfather**，后段（851 词条迁移）完成后移除；§双语i18n 双形态许可同步收窄。
+"""i18n v2 —— 机制与词表分离（数据驱动，蓝本 local-speak2text/i18n.py）。
 
 代码只管机制（回退/格式化/持久化/探测）；词条是**数据**：工具根目录
 `locales/zh.json` + `locales/en.json`（扁平 KV，utf-8）。工具加词条只改 JSON，
-本文件与模板永远归一化一致（执行文档 N2/M1）。zh 键为基准，en 缺失回退 zh，
+本文件与模板永远归一化一致。zh 键为基准，en 缺失回退 zh，
 永不 KeyError。内置最小兜底表：locales 缺失时机制仍可用。
 
 2.1.0：locales 目录解析内置 + 模块导入即自动加载——工具侧零样板，import 即得词条。
 目录解析用**向上查找回退**（平铺与 src/modules 布局都命中），打包态回退 _MEIPASS。
 2.2.0：`LANG` 从"模块级标量 + `global` 重绑"改为 `_STATE` 容器 + `__getattr__` **只读派生**
 （与 `update_helper` 1.4.0 同一手法）。2.1.1 只做到"门面委派对了"，里层仍是**脆形态**——
-C-23 把四工具全命中正说明它是模板层面的形态问题。
+no-global-rebind 把四工具全命中正说明它是模板层面的形态问题。
 
 2.1.1：语言状态改由**访问器** `current_lang()` 暴露（`LANG` 降为内部实现）。
 原因：包 `__init__.py` 若 `from .i18n import *`，会把 `LANG` 拷成**静态副本**，
@@ -33,21 +33,19 @@ _BUILTIN_EN = {"menu_quit": "Quit", "menu_open_logs": "Open log folder"}
 
 TABLES = {"zh": dict(_BUILTIN_ZH), "en": dict(_BUILTIN_EN)}
 
-# 「对外可见状态」的唯一写入点（STANDARDS §D6）。2.2.0 起 `LANG` **不再是可被 global
+# 「对外可见状态」的唯一写入点（§状态唯一写入点）。2.2.0 起 `LANG` **不再是可被 global
 # 重绑的模块级标量**，而是由本模块的 `__getattr__` 现算的只读派生值——于是
 # `from .i18n import *` **拿不到它**（`import *` 不搬运派生名），旧缺陷在结构上无法复现：
 # 那个缺陷正是"模块级标量 + 函数内 global + 包 import * 读死副本"，害过一次（菜单不刷新）。
 _STATE = {"lang": "zh"}
-
 
 def __getattr__(name):
     """PEP 562：`LANG` 由 `_STATE` 派生（读得到、永远活值、模块里没有该全局）。"""
     if name == "LANG":
         return _STATE["lang"]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-# 门禁 2（D1）断言的核心键集：词表必须能回答这些键
+# 门禁 2（§构建门禁）断言的核心键集：词表必须能回答这些键
 KEY_MIN_SET = ("menu_quit", "menu_open_logs")
-
 
 def load_tables(locales_dir):
     """从 locales_dir 合并 zh.json / en.json（数据文件，随工具分发）。失败静默。"""
@@ -59,7 +57,6 @@ def load_tables(locales_dir):
         except (OSError, ValueError):
             pass
 
-
 def detect_system_lang():
     try:
         import ctypes
@@ -67,12 +64,10 @@ def detect_system_lang():
     except Exception:
         return "zh"
 
-
 def init(language="auto"):
     if language == "auto":
         language = detect_system_lang()
     _STATE["lang"] = language if language in TABLES else "zh"
-
 
 def current_lang():
     """当前语言（**推荐给消费者的唯一读法**；2.1.1 新增）。
@@ -81,7 +76,6 @@ def current_lang():
     读到的都是子模块真值，而不是 `from .i18n import *` 拷出的死副本。
     """
     return _STATE["lang"]
-
 
 def t(key, *args, **kwargs):
     """取词。支持 %s 与 {name} 两种填充。"""
@@ -92,10 +86,8 @@ def t(key, *args, **kwargs):
         text = text.format(**kwargs)
     return text
 
-
 def available_langs():
     return sorted(TABLES.keys())
-
 
 def load_language_from_config(config_path):
     try:
@@ -103,7 +95,6 @@ def load_language_from_config(config_path):
             return str(json.load(f).get("language", "auto"))
     except Exception:
         return "auto"
-
 
 def save_language_to_config(config_path, language):
     try:
@@ -117,7 +108,6 @@ def save_language_to_config(config_path, language):
     except Exception:
         pass
 
-
 def _locales_dir():
     """locales 数据目录：从本文件位置逐级向上查找（平铺与 src/modules 布局都命中）；
     打包态回退 _MEIPASS（PyInstaller --add-data 落点）。找不到时退回最后一级
@@ -129,6 +119,5 @@ def _locales_dir():
             return cand
     meipass = getattr(sys, "_MEIPASS", "")
     return Path(meipass) / "locales" if meipass else here / "locales"
-
 
 load_tables(_locales_dir())

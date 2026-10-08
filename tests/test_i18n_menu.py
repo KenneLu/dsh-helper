@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""语言切换必须**重建托盘菜单**（T1/D14）。
+"""语言切换必须**重建托盘菜单**。
 
 回归背景：模板 i18n 包曾 `from .i18n import *`，把 LANG 拷成静态副本——通知切到
 英文，而菜单签名算出来不变 → 菜单永久中文。2.1.1 改为访问器 + PEP 562 委派。
@@ -13,7 +13,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
-from _cleanup import rmtree_cleanup, scratch_dir  # noqa: E402  （R2 位置 + 删前放句柄）
+from _cleanup import rmtree_cleanup, scratch_dir  # noqa: E402  （scratch 目录位置 + 删前放句柄）
 
 _TMP = scratch_dir("dsh-i18n-menu-test-")
 os.environ["DSH_HELPER_DATA_DIR"] = _TMP
