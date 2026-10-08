@@ -30,7 +30,7 @@ from template.appconfig import APP_ID, ICON_ASSET as ICON_ASSET_REL   # noqa: E4
 
 
 APP_NAME = "dsh-helper"
-VERSION = "1.8.2"
+VERSION = "1.8.3"
 # 程序本体目录**不在本文件派生**：唯一出处是 paths 的 APP_DIR（打包后 = exe 所在
 # 目录，开发态 = 仓库根）。
 # 用户数据区/配置/日志/更新暂存同样出自 paths（数据区住 LOCALAPPDATA，

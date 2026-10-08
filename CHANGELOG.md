@@ -3,6 +3,9 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
+## 1.8.3
+- **Semantic IDs across docs, comments and bat annotations** (2026-10-08, W9): single-letter reference codes (criterion IDs, spec section anchors, checklist entry IDs, bat step tags) replaced with semantic names throughout; machine-facing checker interface now uses kebab-case slugs. Documentation/comment/naming layer only - no runtime behavior change; gate re-run green (conformance 0 FAIL, sync 0 drift, full-suite compile pass).
+
 ## 1.8.2
 - **Startup self-identification** (2026-09-20, 判据·启动自证): the `startup` line is now followed by the
   **resolved** data root and config path - `data root: <USER_DATA_DIR>` / `config   : <CONFIG_PATH>`,
