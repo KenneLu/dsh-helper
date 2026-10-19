@@ -8,6 +8,7 @@ Windows 托盘工具，用右键菜单管理 DeepSeek Harness 的 `dsh web`：�
 
 - **中英双语界面**：托盘菜单、通知、弹窗、状态行与错误信息全部走家族模板件 `template/i18n`，`locales/zh.json` 为基准表、`locales/en.json` 缺失键回退中文。偏好区新增 **「语言 / Language」** 项，一键切换并写入 `config.json` 的 `language`（默认 `auto`＝跟随 Windows UI 语言），切换后**立即重建菜单**。路径、服务名、`dsh.cmd` 等数据不参与翻译。
 - **开机自启（G4.1）**：内联注册表代码改为家族模板件 `template/autostart`。打包态优先指向稳定安装位（`%LOCALAPPDATA%\dsh-helper\app\dsh-helper.exe`，存在时），否则退回当前 exe；每次启动都会执行 `migrate_autostart()`，把指向"已消失的 exe"（旧包目录被删）的 Run 键静默修回正确路径。自启状态不再镜像进 `config.json`——注册表是唯一真源（数据·单一真源）。
+- **模板件改走 git submodule 借条（不再本地拷贝）**：`src/template/` 下的拷贝已摘除，改为钉住 `my-diy-tool-template` 的 submodule 借条，家族模块（`appconfig`、`paths`、`autostart`、`i18n`、`icons`、`tray_kit` 等）只有一份来源。工具差异参数 1:1 收敛到工具自持的参数卡 `src/app_params.py`，由 `template.appconfig` 运行时导入覆盖；`VERSION` 仍是 `src/main.py` 单一事实源。`build.bat` 删除随拷贝模式退休的 `conformance_check.py` 临时泄漏门禁，保留 `sync_check.py` 借条检查。
 
 1.7.0 起的补充能力：
 

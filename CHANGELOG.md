@@ -3,6 +3,9 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
+## Unreleased
+- **Template modules migrated from copied files to a git submodule borrow** (2026-10-19, Wave 2): the `src/template/` copies are retired and replaced by `git submodule add https://github.com/KenneLu/my-diy-tool-template.git src/template`, pinned at the kit commit `c600cec` (one source for all family modules; the borrow lives outside the two-step copy/sync cycle). Tool-difference parameters moved 1:1 into the tool-owned card `src/app_params.py` (`template.appconfig` reads it at runtime via `try: import app_params`; `ICON_STATE_ARTISTS` still consumes `src/icon_pipeline.py`). `VERSION` is deliberately **not** in the card - `src/main.py` remains the single source. `build.bat`: retired the `conformance_check.py` temp-leak segment that went away with the copy model, kept the `sync_check.py` borrow gate (pointer-lag / private-edit), and added `src\app_params.py` to the compile gate. README wording updated. No runtime behavior change.
+
 ## 1.8.3
 - **Semantic IDs across docs, comments and bat annotations** (2026-10-08, W9): single-letter reference codes (criterion IDs, spec section anchors, checklist entry IDs, bat step tags) replaced with semantic names throughout; machine-facing checker interface now uses kebab-case slugs. Documentation/comment/naming layer only - no runtime behavior change; gate re-run green (conformance 0 FAIL, sync 0 drift, full-suite compile pass).
 

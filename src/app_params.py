@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
-# TEMPLATE-FROM: my-diy-tool-template/template/appconfig/appconfig.py | TEMPLATE-VER: 1.0.0
-# dsh-helper 参数区（appconfig：拷贝后唯一允许修改的文件）。
-# VERSION 不在此处：单一事实源在 main.py（build.bat / release.yml findstr 读取）。
+"""dsh-helper 参数卡：kit 出厂默认值由 template.appconfig 提供，本文件覆盖工具差异。
+
+本文件由工具自持（在 src/template 借条之外），template.appconfig 运行时
+`try: import app_params` 读取覆盖；未写的键保留 kit 出厂默认值。
+VERSION 不入卡：单一事实源在 src/main.py（build.bat / release.yml findstr 读取）。
+"""
 APP_ID = "dsh-helper"
 APP_NAME = "dsh-helper"
 AUTOSTART_KEY = APP_NAME
@@ -19,4 +22,3 @@ ICON_STATE_ARTISTS = {
     "running": lambda base: _ip.state_image(base, running=True),
     "stopped": lambda base: _ip.state_image(base, running=False),
 }
-
