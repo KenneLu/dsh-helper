@@ -13,6 +13,8 @@ jobs:
       PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - uses: actions/setup-python@v5
         with:
@@ -24,7 +26,7 @@ jobs:
           pip install psutil pystray pillow
 
       - name: Compile check
-        run: python -m py_compile src/main.py src/icons.py src/template/appconfig/appconfig.py src/template/update_helper/update_helper.py src/template/paths/paths.py src/template/log_kit/log_kit.py src/template/tray_kit/tray_kit.py
+        run: python -m py_compile src/main.py src/icons.py src/app_params.py src/template/appconfig/appconfig.py src/template/update_helper/update_helper.py src/template/paths/paths.py src/template/log_kit/log_kit.py src/template/tray_kit/tray_kit.py
 
       - name: Import check (module-level config seed + menu data must not blow up)
         run: python -c "import sys; sys.path.insert(0, 'src'); import main; print('import OK, VERSION =', main.VERSION)"
