@@ -1,4 +1,4 @@
-# dsh-helper v1.8.1
+# dsh-helper v1.8.4
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -6,6 +6,7 @@ Windows tray tool that manages DeepSeek Harness's `dsh web` from a right-click m
 
 Unreleased (not yet versioned — dev work lands as local commits; the version changes only at release time):
 
+- **Startup hardening (1.8.4)**: a blocked/unwritable log path can no longer crash startup (tool-side fail-open: no-op logger + `log init failed` on stderr); a second instance no longer shows a modal — it writes `show.request` and exits silently, and the resident instance answers with an "already running" balloon; a denied tray creation now shows a readable MessageBoxW (restricted terminal/sandbox/remote session, start from File Explorer) plus a best-effort crash log and exit code 2 instead of a raw traceback. Menu/locale text spacing was audited against the Chinese↔Latin rule.
 - **Bilingual UI**: the tray menu, notifications, dialogs, status lines and error messages now go through the family `template/i18n` module, with `locales/zh.json` as the base table and `locales/en.json` falling back to Chinese for missing keys. A **"Language / 语言"** item in the preferences section toggles between the two; the choice is saved to `config.json` (`language`, default `auto` = follow Windows UI language) and the menu is rebuilt immediately. Data such as paths, the service name and `dsh.cmd` is intentionally not translated.
 - **Autostart (G4.1)**: the inline registry code was replaced by the family template module `template/autostart`. Packaged builds now point the Run key at the stable install location (`%LOCALAPPDATA%\dsh-helper\app\dsh-helper.exe`) when it exists, and fall back to the current exe otherwise. On every start `migrate_autostart()` repairs a Run key whose exe has disappeared (e.g. an old package folder was deleted). The autostart state is no longer mirrored into `config.json` — the registry is the single source of truth (数据·单一真源).
 - **Template modules via a git submodule borrow (no local copies)**: the `src/template/` copies are retired; the repo now carries a submodule borrow pinned to `diy-tool-kit`, so the family modules (`appconfig`, `paths`, `autostart`, `i18n`, `icons`, `tray_kit`, ...) have exactly one source. Tool-difference parameters live 1:1 in the tool-owned card `src/app_params.py`, which `template.appconfig` imports at runtime; `VERSION` stays in `src/main.py` as the single source. `build.bat` drops the retired `conformance_check.py` temp-leak gate and keeps the `sync_check.py` borrow check.

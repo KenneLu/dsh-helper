@@ -116,5 +116,14 @@
   "msg_no_cmd_found": "no usable dsh.cmd found",
   "quit_confirm_yes": "Quit",
   "quit_confirm_no": "Cancel",
-  "dup_running": "dsh-helper is already running."
+  "dup_running": "dsh-helper is already running.",
+  "startup_tray_title": "dsh-helper failed to start",
+  "startup_tray_failed": "Could not create the system tray icon (access denied).",
+  "startup_common_causes": "Common causes: the program was started from a restricted terminal/sandbox/remote session, or the system tray is temporarily unavailable.",
+  "startup_from_explorer": "Please start the program by double-clicking it in Windows File Explorer;",
+  "startup_retry_hint": "if it still fails, restart Explorer or the computer and try again.",
+  "startup_log_unavailable": "The log directory is also not writable (possibly started in a restricted environment); no log file was written this time.",
+  "startup_details": "Details (copy and send to the maintainer):",
+  "startup_failed_with": "Startup failed: %s",
+  "dup_running_short": "dsh-helper is already running"
 }

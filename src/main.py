@@ -14,6 +14,7 @@ import sys
 import queue
 import threading
 import time
+import traceback
 import tkinter as tk
 from tkinter import filedialog
 import urllib.error
@@ -30,13 +31,18 @@ from template.appconfig import APP_ID, ICON_ASSET as ICON_ASSET_REL   # noqa: E4
 
 
 APP_NAME = "dsh-helper"
-VERSION = "1.8.3"
+VERSION = "1.8.4"
 # 程序本体目录**不在本文件派生**：唯一出处是 paths 的 APP_DIR（打包后 = exe 所在
 # 目录，开发态 = 仓库根）。
 # 用户数据区/配置/日志/更新暂存同样出自 paths（数据区住 LOCALAPPDATA，
 # 1.6 及以前的 exe 旁旧配置由播种自动迁入）。
 from template.paths import (APP_DIR, CONFIG_PATH, LEGACY_CONFIG_PATH, LOG_DIR, LOG_PATH,
                            UPDATE_DIR, USER_DATA_DIR)
+try:
+    import ctypes
+except ImportError:  # pragma: no cover - Windows 一定有；非 Windows 源码态降级为无弹窗
+    ctypes = None
+SHOW_REQUEST_PATH = USER_DATA_DIR / "show.request"   # 第二实例请求常驻实例提示"已在运行"
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 URL_RE = re.compile(r"https?://(?:127\.0\.0\.1|localhost):([0-9]{1,5})(?:/[^\s]*)?", re.I)
 
@@ -111,8 +117,27 @@ DEFAULT_CONFIG = {
     "quit_stop_dsh": False,
 }
 
-LOG_DIR.mkdir(parents=True, exist_ok=True)
-_logger = log_kit.get_logger(LOG_DIR)   # 滚动 1MB×3（家族标准）
+# 日志初始化失败的原因（None = 正常）。启动失败提示会据此补充"日志目录也不可写"。
+LOG_INIT_ERROR = None
+
+
+class _NoopLogger:
+    """日志不可用时的兜底：吃掉所有日志调用，绝不让日志把主流程弄死。"""
+
+    def info(self, *_parts) -> None:
+        return None
+
+
+try:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    _logger = log_kit.get_logger(LOG_DIR)   # 滚动 1MB×3（家族标准）
+except Exception as exc:  # noqa: BLE001 - 日志永远不能把主流程弄死
+    LOG_INIT_ERROR = exc
+    try:
+        print("log init failed: %s" % exc, file=sys.stderr, flush=True)
+    except Exception:
+        pass
+    _logger = _NoopLogger()
 
 
 def log(*parts):
@@ -953,9 +978,14 @@ def update_menu():
 
 
 def menu_refresh_loop():
-    """1.5s 补画拍（tray_kit 三循环之②）：把「菜单开着时被推迟」的那次重画补上。"""
+    """1.5s 补画拍（tray_kit 三循环之②）：把「菜单开着时被推迟」的那次重画补上。
+
+    同一拍里顺带消费 show.request：第二个实例被单实例守卫挡下后只写文件、不弹窗，
+    常驻实例发现就删掉并弹一次「已在运行」气泡（本工具没有设置窗口）。
+    """
     while not STOP_EVENT.wait(1.5):
         try:
+            consume_show_request()
             update_menu()
             MENU_SIG.flush_deferred()
         except Exception as exc:
@@ -1321,8 +1351,12 @@ def build_status_refresh_interval_menu():
     ])
 
 
-def open_log(_icon, _item):
-    os.startfile(str(LOG_DIR))  # noqa: S606
+def open_log(_icon=None, _item=None):
+    """打开日志目录：目录不可用时只记日志，绝不让菜单回调抛异常。"""
+    try:
+        os.startfile(str(LOG_DIR))  # noqa: S606
+    except OSError as exc:
+        log(f"open log dir failed: {exc}")
 
 
 def open_config(_icon, _item):
@@ -1642,15 +1676,123 @@ def lang_audit():
 # 而且每个实例的「退出」都会先停 dsh。互斥体由内核管理，进程消失即自动释放。
 
 
-def main():
+class TrayStartupError(RuntimeError):
+    """托盘窗口创建失败（典型：受限终端/沙箱/远程会话里 PermissionError）。"""
+
+
+def run_tray_icon(icon, setup) -> None:
+    """进入托盘消息循环；失败包成可读错误，交给顶层把原因告诉用户。"""
+    try:
+        icon.run(setup=setup)
+    except Exception as exc:  # noqa: BLE001 - 托盘失败要可读，不裸抛 traceback
+        raise TrayStartupError(exc) from exc
+
+
+def _startup_headless() -> bool:
+    """无头入口（--smoke / --lang-audit）不弹窗：那里没有用户可看，弹窗只会挂住流水线。"""
+    return any(flag in sys.argv for flag in ("--smoke", "--lang-audit"))
+
+
+def _startup_failure_text(exc, detail) -> str:
+    """把启动异常翻成用户能照着做的提示（含 traceback 尾部供维护者定位）。"""
+    if isinstance(exc, TrayStartupError):
+        lines = [i18n.t("startup_tray_failed"),
+                 "",
+                 i18n.t("startup_common_causes"),
+                 i18n.t("startup_from_explorer"),
+                 i18n.t("startup_retry_hint")]
+    else:
+        lines = [i18n.t("startup_failed_with", exc)]
+    if LOG_INIT_ERROR is not None:
+        lines.extend(["", i18n.t("startup_log_unavailable")])
+    lines.extend(["", i18n.t("startup_details"), str(detail)[-1500:]])
+    return "\n".join(lines)
+
+
+def _write_startup_failure_log(text):
+    """best-effort 写崩溃信息：日志目录 → 程序目录 → %TEMP%；全失败返回 None。"""
+    temp_root = os.environ.get("TEMP") or os.environ.get("TMP") or ""
+    candidates = [
+        LOG_DIR / (APP_ID + ".log"),
+        APP_DIR / "startup-error.log",
+        Path(temp_root) / (APP_ID + "-startup-error.log") if temp_root else None,
+    ]
+    for path in candidates:
+        if path is None:
+            continue
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "a", encoding="utf-8") as fh:
+                fh.write("[%s] %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), text))
+            return path
+        except Exception:  # noqa: BLE001 - 换下一个落点
+            continue
+    return None
+
+
+def _message_box(text, title=None) -> bool:
+    """MessageBoxW 兜底；任何失败都静默（没有桌面/没有 user32 时不能反过来崩）。"""
+    title = title or i18n.t("startup_tray_title")
+    if ctypes is None:
+        return False
+    try:
+        ctypes.windll.user32.MessageBoxW(0, text, title, 0x10)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _show_startup_failure(exc, detail) -> None:
+    """启动失败的可读提示：尽力写日志 + MessageBoxW + stderr；本身绝不能抛。"""
+    text = _startup_failure_text(exc, detail)
+    try:
+        _write_startup_failure_log(text)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        print(text, file=sys.stderr, flush=True)
+    except Exception:  # noqa: BLE001
+        pass
+    if not _startup_headless():
+        try:
+            _message_box(text)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def request_show_existing() -> int:
+    """第二个实例：不弹任何模态框，只写 show.request 提示常驻实例「已在运行」，静默退出。
+
+    本工具没有设置窗口，所以没有可前置的窗口；写失败也静默返回 0。
+    """
+    try:
+        SHOW_REQUEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+        SHOW_REQUEST_PATH.write_text(time.strftime("%Y-%m-%dT%H:%M:%S\n"), encoding="utf-8")
+        log(f"duplicate instance: asked the resident instance to show the balloon ({SHOW_REQUEST_PATH})")
+    except OSError as exc:
+        log(f"duplicate instance: cannot write {SHOW_REQUEST_PATH}: {exc}")
+    return 0
+
+
+def consume_show_request() -> bool:
+    """常驻实例侧：消费 show.request → 删文件并弹一次「dsh-helper 已在运行」气泡。"""
+    try:
+        if not SHOW_REQUEST_PATH.exists():
+            return False
+        SHOW_REQUEST_PATH.unlink()
+    except OSError as exc:  # noqa: BLE001 - 读不到就下一轮再看
+        log(f"show request unreadable: {exc}")
+        return False
+    log("duplicate instance: showing the already-running balloon")
+    notify(i18n.t("dup_running_short"))
+    return True
+
+
+def main() -> int:
     global TRAY_ICON
     if not tray_kit.acquire_single_instance("dsh-helper", log=log):
-        log("another instance is already running; exiting")
-        tray_kit.warn_duplicate_instance(
-            APP_NAME,
-            message="\n\n".join([i18n.t("dup_running"),
-                                  i18n.t("dup_hint")]))
-        return
+        # 第二个实例：不弹模态框（1.8.4 体验修复），只写请求让常驻实例提示一句。
+        return request_show_existing()
     log(f"startup {APP_NAME} v{VERSION} (pid {os.getpid()})")
     # 判据·启动自证（§4.1.38 的**唯一正本样例**，勿自创变体）：`startup` 行之后紧跟两行
     # **解析后**的数据根与配置路径。为什么值得：`python -c` / heredoc 探针**不落盘**，
@@ -1727,8 +1869,19 @@ def main():
         elif CFG.get("start_on_launch"):
             threading.Thread(target=lambda: run_action(i18n.t("action_start"), start_impl), daemon=True).start()
 
-    TRAY_ICON.run(setup=setup_tray)
+    try:
+        run_tray_icon(TRAY_ICON, setup_tray)
+    except TrayStartupError as exc:
+        detail = traceback.format_exc()
+        try:
+            log("fatal startup error:\n" + detail)
+        except Exception:  # noqa: BLE001 - 日志已兜底；这里也不能再抛
+            pass
+        _show_startup_failure(exc, detail)
+        STOP_EVENT.set()
+        return 2
     STOP_EVENT.set()
+    return 0
 
 
 if __name__ == "__main__":
@@ -1736,4 +1889,15 @@ if __name__ == "__main__":
         raise SystemExit(smoke())
     if "--lang-audit" in sys.argv:
         raise SystemExit(lang_audit())
-    main()
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except Exception as exc:  # noqa: BLE001 - 启动失败必须给用户可读原因，而不是裸 traceback
+        detail = traceback.format_exc()
+        try:
+            log("fatal application error:\n" + detail)
+        except Exception:  # noqa: BLE001
+            pass
+        _show_startup_failure(exc, detail)
+        raise SystemExit(2)

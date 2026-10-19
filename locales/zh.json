@@ -116,5 +116,14 @@
   "msg_no_cmd_found": "未找到可用的 dsh.cmd",
   "quit_confirm_yes": "退出",
   "quit_confirm_no": "取消",
-  "dup_running": "dsh-helper 已经在运行了。"
+  "dup_running": "dsh-helper 已经在运行了。",
+  "startup_tray_title": "dsh-helper 启动失败",
+  "startup_tray_failed": "无法创建系统托盘图标（拒绝访问）。",
+  "startup_common_causes": "常见原因：程序从受限终端/沙箱/远程会话启动，或系统托盘暂不可用。",
+  "startup_from_explorer": "请从 Windows 文件资源管理器直接双击本程序启动；",
+  "startup_retry_hint": "若仍失败，请重启资源管理器或电脑后重试。",
+  "startup_log_unavailable": "日志目录也不可写（可能被受限环境启动），本次没有写出日志文件。",
+  "startup_details": "详细信息（可复制发给维护者）：",
+  "startup_failed_with": "程序启动失败：%s",
+  "dup_running_short": "dsh-helper 已在运行"
 }
