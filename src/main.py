@@ -131,6 +131,10 @@ class _NoopLogger:
 try:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     _logger = log_kit.get_logger(LOG_DIR)   # 滚动 1MB×3（家族标准）
+    # log_kit 1.0.5 起初始化失败在模板层静默（NullHandler + LAST_INIT_ERROR）；
+    # 工具侧仍要保留「可见的失败信号 + LOG_INIT_ERROR」诊断契约，故把它转成异常走同一兜底。
+    if getattr(log_kit, "LAST_INIT_ERROR", ""):
+        raise RuntimeError(log_kit.LAST_INIT_ERROR)
 except Exception as exc:  # noqa: BLE001 - 日志永远不能把主流程弄死
     LOG_INIT_ERROR = exc
     try:
