@@ -17,6 +17,10 @@ sys.path.insert(0, str(SRC))
 
 import main  # noqa: E402
 
+# CI runner 的 Windows UI 语言是英文：本测试断言中文可读文案，先把界面语言钉成 zh。
+# 产品自身的 en/zh 本地化正确性由 test_i18n 覆盖，不靠这条文案测试。
+main.i18n.init("zh")
+
 FAILS = []
 
 
