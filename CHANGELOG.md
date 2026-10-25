@@ -3,6 +3,9 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
+## 1.8.6
+- Template pointer upgraded to diy-tool-kit v1.0.0 (docs split + CLI/tray guidance).
+
 ## 1.8.4
 - **Startup hardening** (2026-10-20): the module-level log init is now fail-open (no-op logger + `log init failed` on stderr) so a blocked/unwritable log path cannot crash startup; duplicate launches are silent (the second instance writes `show.request` and returns 0, the resident instance consumes it and shows an "already running" balloon; `warn_duplicate_instance` is kept as an exception fallback only); a denied tray creation (`TRAY_ICON.run()` raising, e.g. PermissionError in a restricted terminal/sandbox/remote session) now produces a readable MessageBoxW (start from File Explorer / restart Explorer), a best-effort crash log (log dir -> program dir -> %TEMP%) and exit code 2 instead of a raw traceback, and the top-level handler does the same for any other startup exception; headless entries (`--smoke`, `--lang-audit`) never show dialogs. Added tests: `test_log_failopen.py`, `test_show_request.py`, `test_startup_guard.py`. Unicode spacing audit: 0 violations in main.py; the 7 zh.json matches are number+unit (5秒/1分钟) or placeholders/commands and are left unchanged by the rule. VERSION 1.8.3 -> 1.8.4.
 
