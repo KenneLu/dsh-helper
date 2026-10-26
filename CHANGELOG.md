@@ -3,6 +3,9 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
+## 1.8.7
+- **在线更新修复 + 命名规则（模板 update_helper 1.5.1）**（2026-10-26）：模板修复包根解析（按内容判定，目录名/版本号不作判据），并确立“安装目录、exe、发布 zip 内层都不携带版本号”的规则——版本写进 exe 的 PE 文件属性（FileVersion/ProductVersion），发布 zip 采用稳定 `dsh-helper/` 目录；发布前新增 OTA 布局门禁与 PE 版本门禁，新增模板自带本地 OTA 验收（已挂进 build.bat 与 CI）。旧版更新器无法自救，本版需手动替换一次。
+
 ## 1.8.6
 - Template pointer upgraded to diy-tool-kit v1.0.0 (docs split + CLI/tray guidance).
 

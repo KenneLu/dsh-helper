@@ -43,6 +43,7 @@ jobs:
           $version = ($line.Line -split '"')[1]
           "version=$version" >> $env:GITHUB_OUTPUT
           "package=dsh-helper-$version" >> $env:GITHUB_OUTPUT
+          "app_id=dsh-helper" >> $env:GITHUB_OUTPUT
           Write-Host "version=$version"
 
       - name: Compile gate
@@ -57,16 +58,44 @@ jobs:
         shell: cmd
         run: build.bat norun nopause nosmoke
 
-      - name: Package zip
+      - name: Package zip (OTA layout + PE version gates)
         shell: pwsh
         run: |
           $pkg = "${{ steps.version.outputs.package }}"
-          Compress-Archive -Path "release/$pkg" -DestinationPath "release/$pkg-windows-x64.zip"
-          Get-FileHash "release/$pkg-windows-x64.zip" -Algorithm SHA256 |
+          $version = "${{ steps.version.outputs.version }}"
+          $appId = "${{ steps.version.outputs.app_id }}"
+          $dir = "release/$pkg"
+          # Stable paths: zip inner folder is the APP_ID, never the version.
+          $stageRoot = Join-Path ([System.IO.Path]::GetTempPath()) "ota-stage-$pkg"
+          $stage = Join-Path $stageRoot $appId
+          if (Test-Path $stageRoot) { Remove-Item $stageRoot -Recurse -Force }
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Copy-Item -Path "$dir/*" -Destination $stage -Recurse -Force
+          $zip = "release/$pkg-windows-x64.zip"
+          Compress-Archive -Path $stage -DestinationPath $zip
+          Remove-Item $stageRoot -Recurse -Force
+          # OTA layout gate + PE version gate: fail before publishing.
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip).Path)
+          try {
+            $tops = @($archive.Entries | ForEach-Object { ($_.FullName -split '/')[0] } | Sort-Object -Unique)
+            if ($tops.Count -ne 1 -or $tops[0] -ne $appId) {
+              throw "OTA layout gate: zip top-level = [$($tops -join ', ')], expected [$appId] (stable, no version)"
+            }
+            if (-not ($archive.Entries | Where-Object { $_.FullName -eq "$appId/dsh-helper.exe" })) {
+              throw "OTA layout gate: $appId/dsh-helper.exe missing from zip"
+            }
+          } finally {
+            $archive.Dispose()
+          }
+          $fv = (Get-Item "$dir/dsh-helper.exe").VersionInfo.FileVersion
+          if (-not $fv -or -not $fv.StartsWith($version)) {
+            throw "PE version gate: FileVersion='$fv', expected '$version' (embed via --version-file)"
+          }
+          Get-FileHash $zip -Algorithm SHA256 |
             ForEach-Object { "$($_.Hash)  $pkg-windows-x64.zip" } |
             Set-Content "release/$pkg-windows-x64.zip.sha256"
           Get-ChildItem release | Format-Table Name, Length
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

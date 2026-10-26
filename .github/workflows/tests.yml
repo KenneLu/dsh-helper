@@ -58,3 +58,8 @@ jobs:
       - name: Update logic check
         run: |
           python -c "import sys; sys.path.insert(0, 'src'); from template.update_helper.update_helper import _version_is_newer as v, _tag_to_version as t; assert v('1.8.0','1.7.0'); assert not v('1.7.0','1.7.0'); assert t('v1.8.0')=='1.8.0'; print('update logic OK')"
+
+      # Template-owned local OTA acceptance: package-root resolution + the REAL
+      # download_and_prepare() + rendered bat replacement chain (no network, no app).
+      - name: Local OTA acceptance (template ota_test)
+        run: python src/template/ota_test/run_local_ota_test.py --app-id dsh-helper
