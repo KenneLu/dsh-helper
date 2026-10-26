@@ -88,15 +88,26 @@ check("download item enabled condition true",
       M.LATEST_VERSION is not None and getattr(sys, "frozen", False) is False or True)
 
 # ② 下载完成 → 缓存返回的脚本路径
+# 统一更新交互（1.8.9）走模板块弹窗；测试必须替换 `_ask_update_choice`，
+# 否则会真的弹出 Tk 窗口并等用户点击（构建机/CI 会挂住）。
 M.PENDING_UPDATE_CMD = None
 M.update_helper.download_and_prepare = (
-    lambda latest, target_dir, update_dir, log=None: r"C:\tmp\dsh-apply.cmd")
+    lambda latest, target_dir, update_dir, log=None, progress=None: r"C:\tmp\dsh-apply.cmd")
+
+
+def _fake_ask(download):
+    download(lambda *a: None)   # 走一遍真实的“先下载再决定”接线
+    return "later"              # 模拟用户点「稍后更新」
+
+_real_ask = M._ask_update_choice
+M._ask_update_choice = _fake_ask
 _real_frozen = getattr(sys, "frozen", None)
 sys.frozen = True   # 解锁 packaged-only 分支
 try:
     M.download_update_menu()
     ok = wait_for(lambda: M.PENDING_UPDATE_CMD is not None)
 finally:
+    M._ask_update_choice = _real_ask
     if _real_frozen is None:
         del sys.frozen
     else:

@@ -26,12 +26,12 @@ import psutil
 import pystray
 from PIL import Image, ImageDraw, ImageOps
 
-from template import autostart, i18n, log_kit, paths, tray_icons, tray_kit, update_helper   # noqa: E402
+from template import autostart, i18n, log_kit, paths, tray_icons, tray_kit, update_helper, update_ui   # noqa: E402
 from template.appconfig import APP_ID, ICON_ASSET as ICON_ASSET_REL   # noqa: E402
 
 
 APP_NAME = "dsh-helper"
-VERSION = "1.8.8"
+VERSION = "1.8.9"
 # 程序本体目录**不在本文件派生**：唯一出处是 paths 的 APP_DIR（打包后 = exe 所在
 # 目录，开发态 = 仓库根）。
 # 用户数据区/配置/日志/更新暂存同样出自 paths（数据区住 LOCALAPPDATA，
@@ -1480,6 +1480,14 @@ def quit_menu(icon, _item):
     _proceed, stop_dsh = _decide_quit()   # 持久化已随勾选动作完成
     if not _proceed:
         return
+    perform_quit(stop_dsh, icon=icon)
+
+
+def perform_quit(stop_dsh: bool, icon=None) -> None:
+    """退出执行体（确认框之后 / 更新弹窗「立即更新」直调，**不做二次确认**）。
+
+    ``icon=`` 供测试/调用方传入当前托盘对象；缺省用模块级 ``TRAY_ICON``。
+    """
     # G4.2 条款 4/5：服务放行是合法状态——只有勾选「同时停止」才停 dsh。
     current = state_copy()
     pids = set()
@@ -1501,7 +1509,9 @@ def quit_menu(icon, _item):
     log(f"quit requested; graceful stop pids={sorted(pids)}")
     if pids:
         stop_process_group(pids)
-    icon.stop()
+    target_icon = icon if icon is not None else TRAY_ICON
+    if target_icon is not None:
+        target_icon.stop()
     if pids:
         log("quit: managed dsh stopped")
     if PENDING_UPDATE_CMD:
@@ -1547,21 +1557,64 @@ def check_update_menu(_icon=None, _item=None):
 
 
 def download_update_menu(_icon=None, _item=None):
-    global PENDING_UPDATE_CMD
+    """托盘「下载并更新」：统一交互（模板 update_ui）——立即弹窗 + 进度条 + 两个选项。
+
+    不再用气泡/无反馈：点击后马上出现「正在下载更新…」，下载完弹窗刷新为完成态，
+    给出「立即更新 / 稍后更新」，并写明需要退出软件后才能应用。
+    """
     latest = LATEST_VERSION
     if not latest or not getattr(sys, "frozen", False):
         return
+    threading.Thread(target=_download_update_worker, args=(latest,),
+                     name="dsh-update-download", daemon=True).start()
 
-    def worker():
+
+def _ask_update_choice(download):
+    """弹窗让用户选「立即更新 / 稍后更新」。
+
+    单独成函数是为了**测试可替换**：测试不该为了验证接线去开真实窗口
+    （窗口测试会污染构建机/CI 桌面，也容易挂住）。
+    """
+    return ui_post(lambda: update_ui.run_download_dialog(
+        download, lang=i18n.current_lang(), app_name=APP_NAME, log=log,
+        icon=resource_path("resources/icons/default/48.png")))
+
+
+def _download_update_worker(latest):
+    global PENDING_UPDATE_CMD
+
+    def download(progress):
+        # 下载/校验/暂存全在模板 update_helper；progress 供弹窗进度条。
+        # 先记 pending：这样无论用户点「立即更新」还是关掉弹窗，退出路径都能拿到脚本。
         global PENDING_UPDATE_CMD
-        try:
-            PENDING_UPDATE_CMD = update_helper.download_and_prepare(latest, APP_DIR, UPDATE_DIR, log=log)
-            notify(i18n.t("notify_update_ready"))
-        except Exception as exc:
-            log(f"update download failed: {exc}")
-            notify(i18n.t("notify_update_download_failed", exc))
+        path = update_helper.download_and_prepare(
+            latest, APP_DIR, UPDATE_DIR, log=log, progress=progress)
+        PENDING_UPDATE_CMD = path
+        return path
+
+    try:
+        # 对话框必须在 Tk 线程；ui_post 会阻塞本工作线程直到用户做出选择。
+        decision = _ask_update_choice(download)
+    except Exception as exc:  # noqa: BLE001 - 弹窗链路失败要留痕，不能静默
+        log(f"update dialog failed: {exc}")
+        notify(i18n.t("notify_update_download_failed", exc))
         update_menu()
-    threading.Thread(target=worker, daemon=True).start()
+        return
+
+    if decision == "apply":
+        if not PENDING_UPDATE_CMD:
+            log("update: apply requested but no pending script exists")
+            notify(i18n.t("notify_update_pending_missing"))
+            update_menu()
+            return
+        log("update: user chose 'apply now'; quitting to run the replacement script")
+        perform_quit(stop_dsh=False)
+        return
+    if decision == "later":
+        log("update: user chose 'later'; replacement script will run on next quit")
+        if PENDING_UPDATE_CMD:
+            notify(i18n.t("notify_update_ready"))
+    update_menu()
 
 
 def build_menu():

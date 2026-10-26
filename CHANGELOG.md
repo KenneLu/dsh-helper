@@ -3,6 +3,9 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
+## 1.8.9
+- **统一「下载更新」交互（模板 `update_ui` 1.0.0 + `update_helper` 1.5.2）**（2026-10-26）：点击「下载并更新」后**立即弹窗**「正在下载更新…」并显示进度条（有 Content-Length 时显示百分比与已下载/总大小）；下载完成弹窗刷新为「更新已下载完成」、进度条满格，出现「立即更新 / 稍后更新」两个按钮，并明确说明**更新需要退出本软件后才能应用**（立即更新=退出并自动替换重启；稍后更新=保留更新包，下次退出时自动执行）。下载失败在同一弹窗内显示错误。此前是后台静默下载 + 完成/失败气泡（点了像没反应），且四个工具各写一套；现由模板统一实现与文案，dsh 只做接线。新增本地视觉验收 demo（`python src\template\update_ui\demo.py`）与 `ota_test --ui-demo`；`ota_test` 增加 update_ui 无窗口静态断言（中英词表对齐、进度文案、退出说明）。
+
 ## 1.8.8
 - **修复托盘图标停在灰色 stopped（菜单却显示运行中）**（2026-10-26）：启动顺序是 `refresh_state()` → 建托盘；若 dsh Web 已在运行（接管路径），`refresh_state()` 会在托盘创建前把 `phase` 置为 running，并把 running 签名记进 `MENU_SIG`。之后状态不再变化 ⇒ `rebuild_menu()` 不会再触发，而托盘初态被硬编码成 `stopped` ⇒ 图标永久停在灰鲸，菜单（lambda 实时求值）仍显示「运行中」。修法：新增 `initial_tray_state()`，按当前 `phase` 计算初态（running 才用蓝鲸，其余 stopped），并用同一值 `get()` + `bind()`；新增 `tests/test_tray_initial_state.py` 回归钉（挂进 build.bat 与 CI）。模板 `tray_icons/README.md` / 托盘工具规范同步写入「初态必须来自当前业务状态，禁止硬编码默认图」规则。1.8.5–1.8.7 均受此问题影响。
 
