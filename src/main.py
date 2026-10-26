@@ -31,7 +31,7 @@ from template.appconfig import APP_ID, ICON_ASSET as ICON_ASSET_REL   # noqa: E4
 
 
 APP_NAME = "dsh-helper"
-VERSION = "1.8.7"
+VERSION = "1.8.8"
 # 程序本体目录**不在本文件派生**：唯一出处是 paths 的 APP_DIR（打包后 = exe 所在
 # 目录，开发态 = 仓库根）。
 # 用户数据区/配置/日志/更新暂存同样出自 paths（数据区住 LOCALAPPDATA，
@@ -245,6 +245,18 @@ def set_state(**values):
 def state_copy():
     with STATE_LOCK:
         return dict(STATE)
+
+
+def initial_tray_state():
+    """创建托盘时的初态：必须来自**当前业务状态**，不得硬编码 stopped（1.8.8 修复）。
+
+    启动顺序是 refresh_state() → 建托盘。若 dsh Web 已在运行（接管路径），
+    refresh_state() 会把 phase 置为 running，并把该签名记进 MENU_SIG；等托盘建好后
+    状态不再变化，rebuild_menu() 就不会再跑——此时若初态写死 stopped，图标会永久
+    停在灰色 stopped 图，而菜单文字（lambda 实时求值）仍显示「运行中」。
+    实测复现：1.8.7 + 「dsh Web 已在运行→重启 helper」。
+    """
+    return "running" if state_copy().get("phase") == "running" else "stopped"
 
 
 def configured_dsh_command_path():
@@ -1833,13 +1845,17 @@ def main() -> int:
     save_config()
     refresh_state()
     tray_icons.tray_icons.init()
+    # 初态必须按"此刻已解析出来的状态"算：refresh_state() 可能已经接管了正在运行的
+    # dsh Web（phase=running），且那次 update_menu() 已把 running 签名记进 MENU_SIG；
+    # 这里再硬编码 stopped 的话，之后没有状态变化 → 永不 rebuild → 图标永久灰鲸。
+    initial_state = initial_tray_state()
     TRAY_ICON = pystray.Icon(
         "dsh-helper",
-        icon=tray_icons.tray_icons.get("stopped"),
+        icon=tray_icons.tray_icons.get(initial_state),
         title=APP_NAME,
         menu=build_menu(),
     )
-    tray_icons.tray_icons.bind(TRAY_ICON, "stopped")
+    tray_icons.tray_icons.bind(TRAY_ICON, initial_state)
     threading.Thread(target=monitor_loop, name="dsh-monitor", daemon=True).start()
     # 第②拍：菜单开着时被推迟的重画在这里补上（状态刷新间隔最长 600s，不能靠它）。
     threading.Thread(target=menu_refresh_loop, name="dsh-menu-refresh", daemon=True).start()

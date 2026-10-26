@@ -3,6 +3,9 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
+## 1.8.8
+- **修复托盘图标停在灰色 stopped（菜单却显示运行中）**（2026-10-26）：启动顺序是 `refresh_state()` → 建托盘；若 dsh Web 已在运行（接管路径），`refresh_state()` 会在托盘创建前把 `phase` 置为 running，并把 running 签名记进 `MENU_SIG`。之后状态不再变化 ⇒ `rebuild_menu()` 不会再触发，而托盘初态被硬编码成 `stopped` ⇒ 图标永久停在灰鲸，菜单（lambda 实时求值）仍显示「运行中」。修法：新增 `initial_tray_state()`，按当前 `phase` 计算初态（running 才用蓝鲸，其余 stopped），并用同一值 `get()` + `bind()`；新增 `tests/test_tray_initial_state.py` 回归钉（挂进 build.bat 与 CI）。模板 `tray_icons/README.md` / 托盘工具规范同步写入「初态必须来自当前业务状态，禁止硬编码默认图」规则。1.8.5–1.8.7 均受此问题影响。
+
 ## 1.8.7
 - **在线更新修复 + 命名规则（模板 update_helper 1.5.1）**（2026-10-26）：模板修复包根解析（按内容判定，目录名/版本号不作判据），并确立“安装目录、exe、发布 zip 内层都不携带版本号”的规则——版本写进 exe 的 PE 文件属性（FileVersion/ProductVersion），发布 zip 采用稳定 `dsh-helper/` 目录；发布前新增 OTA 布局门禁与 PE 版本门禁，新增模板自带本地 OTA 验收（已挂进 build.bat 与 CI）。旧版更新器无法自救，本版需手动替换一次。
 
