@@ -3,6 +3,9 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
+## 1.8.12
+- **检查更新统一为消息流程（模板 update_ui 1.1.0）**（2026-10-26）：点「检查 dsh-helper 更新」先提示「正在检查更新…」，1 秒后真正查询，再按结果发「已是最新 / 发现新版本 / 检查失败」气泡；下载仍走统一进度弹窗。四个工具检查交互一致。
+
 ## 1.8.11
 - **OTA 替换链收尾修复（模板 update_helper 1.5.3）**（2026-10-26）：1.8.10 实机 OTA 暴露 Robocopy 黑窗与 30 秒等待：旧进程刚退出时 Windows 仍短暂持有 exe 句柄，替换脚本周立刻 Robocopy 撞 ERROR 32，按默认 `/W:30` 等 30 秒；且 `DETACHED_PROCESS` 让 robocopy 自建可见 console。模板 1.5.3：等待后静置 1.5s 再复制、robocopy 改 `/R:5 /W:1`、`launch_pending_cmd` 只用 `CREATE_NO_WINDOW`；`ota_test` 增加 settled/`/R` 静态断言。本版同时把托盘「下载并更新」的弹窗标题栏换成 app 图标（1.8.9 已有）。
 

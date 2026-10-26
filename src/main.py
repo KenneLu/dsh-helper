@@ -31,7 +31,7 @@ from template.appconfig import APP_ID, ICON_ASSET as ICON_ASSET_REL   # noqa: E4
 
 
 APP_NAME = "dsh-helper"
-VERSION = "1.8.11"
+VERSION = "1.8.12"
 # 程序本体目录**不在本文件派生**：唯一出处是 paths 的 APP_DIR（打包后 = exe 所在
 # 目录，开发态 = 仓库根）。
 # 用户数据区/配置/日志/更新暂存同样出自 paths（数据区住 LOCALAPPDATA，
@@ -1540,21 +1540,18 @@ PENDING_UPDATE_CMD = None
 
 
 def check_update_menu(_icon=None, _item=None):
-    def worker():
+    """统一消息模式（模板 update_ui 1.1.0）：先「正在检查更新…」，1 秒后真查再发结果。"""
+    def check():
         global LATEST_VERSION
         result = update_helper.check_update(VERSION, force=True)
         if result.get("newer"):
             LATEST_VERSION = result["latest"]
-            notify(i18n.t("notify_update_available", result["latest"], VERSION))
-        elif result.get("error"):
-            # 网络失败不动既有状态，避免误清已发现的新版本
-            notify(i18n.t("notify_update_check_failed", result["error"]))
-        else:
+        elif not result.get("error"):
             LATEST_VERSION = None
-            notify(i18n.t("notify_update_latest", VERSION))
-        update_menu()
-    threading.Thread(target=worker, daemon=True).start()
+        return result
 
+    update_ui.run_check_flow(check, notify, VERSION, lang=i18n.current_lang(),
+                             on_result=lambda _result: update_menu())
 
 def download_update_menu(_icon=None, _item=None):
     """托盘「下载并更新」：统一交互（模板 update_ui）——立即弹窗 + 进度条 + 两个选项。
