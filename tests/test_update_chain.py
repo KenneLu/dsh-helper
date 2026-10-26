@@ -152,7 +152,7 @@ try:
     _ok = _UH.launch_pending_cmd(r"C:\tmp\dsh-apply.cmd", log=lambda *a: None)
 finally:
     _UH.subprocess.Popen = _real_popen
-_want = getattr(_sp, "CREATE_NO_WINDOW", 0) | getattr(_sp, "DETACHED_PROCESS", 0)
+_want = getattr(_sp, "CREATE_NO_WINDOW", 0)   # 1.5.3: no DETACHED_PROCESS (robocopy console)
 check("launch flags suppress the console and detach the child",
       _ok is True and _seen.get("flags") == _want, repr(_seen))
 
