@@ -3,6 +3,9 @@
 All notable changes to dsh-helper are documented here.
 The tagging convention matches the versions in this file.
 
+## 1.8.13
+- **更新模板引用到 diy-tool-kit `55f627e`**（2026-11-05）：模板 `update_ui` 确立模态下载对话框约定——调用方不得加固定业务超时；`ota_test` 断言加固（防 `**kwargs` 绕过、改用 `VAR_KEYWORD` 判定）。无运行时功能变更。VERSION 1.8.12 -> 1.8.13。
+
 ## 1.8.12
 - **检查更新统一为消息流程（模板 update_ui 1.1.0）**（2026-10-26）：点「检查 dsh-helper 更新」先提示「正在检查更新…」，1 秒后真正查询，再按结果发「已是最新 / 发现新版本 / 检查失败」气泡；下载仍走统一进度弹窗。四个工具检查交互一致。
 
