@@ -313,11 +313,17 @@ rem the shipped copy: pin it to a throwaway COPY inside smoke-data.
 if not exist "%RELEASE_DIR%\smoke-data" mkdir "%RELEASE_DIR%\smoke-data"
 copy /y "%RELEASE_DIR%\config.json" "%RELEASE_DIR%\smoke-data\config.json" >nul
 set "DSH_HELPER_CONFIG=%RELEASE_DIR%\smoke-data\config.json"
+rem Pin DSH_HOME too: the smoke's `dsh web --help` would otherwise read/write the
+rem developer's real ~/.dsh profile (Low-integrity sandbox process -> EPERM).
+rem ABSOLUTE path required: the dsh child process runs with cwd=<npm prefix>, so a
+rem relative DSH_HOME would resolve there instead of the repo.
+set "DSH_HOME=%~dp0%RELEASE_DIR%\smoke-data\dsh-home"
 echo [TEST] frozen smoke ...
 "%FROZEN_EXE%" --smoke
 set "SMOKE_RC=%errorlevel%"
 set "DSH_HELPER_DATA_DIR="
 set "DSH_HELPER_CONFIG="
+set "DSH_HOME="
 if not "%SMOKE_RC%"=="0" (
   echo [ERROR] smoke test failed. See %RELEASE_DIR%\smoke-data\log
   rem Report BEFORE cleaning (no-delete-before-report): the failure evidence must reach the build
