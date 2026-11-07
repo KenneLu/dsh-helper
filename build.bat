@@ -250,6 +250,8 @@ rmdir /s /q "build\dist_tmp" 2>nul
 copy /y config.json "%RELEASE_DIR%\config.json" >nul 2>nul
 if exist README.md copy /y README.md "%RELEASE_DIR%" >nul
 if exist README.zh-CN.md copy /y README.zh-CN.md "%RELEASE_DIR%" >nul
+rem The upgrade guide is opened from the tray menu (frozen mode: APP_DIR\doc).
+if exist doc xcopy /e /i /y doc "%RELEASE_DIR%\doc" >nul
 
 rem Deliverable checks: exe + runtime - guards against a silently empty package.
 if not exist "%FROZEN_EXE%" (
@@ -288,6 +290,13 @@ if not exist "%RELEASE_DIR%\_internal\%APPNAME%-taskbar.ico" (
 )
 if not exist "%RELEASE_DIR%\config.json" (
   echo [ERROR] factory config.json missing from the release.
+  if not defined NOPAUSE pause
+  exit /b 1
+)
+rem The tray menu opens the upgrade guide from the install dir; a missing guide
+rem makes that menu item a dead end in frozen mode.
+if not exist "%RELEASE_DIR%\doc\dsh-upgrade-guide.md" (
+  echo [ERROR] upgrade guide missing from the release.
   if not defined NOPAUSE pause
   exit /b 1
 )

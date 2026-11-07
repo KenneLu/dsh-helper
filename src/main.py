@@ -16,7 +16,8 @@ import threading
 import time
 import traceback
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, simpledialog
+from html import escape as html_escape
 import urllib.error
 import urllib.request
 import webbrowser
@@ -25,6 +26,14 @@ from pathlib import Path
 import psutil
 import pystray
 from PIL import Image, ImageDraw, ImageOps
+
+# 容错：数据根/数据区环境变量被设成**纯空白**（如 " "）时视为未设置。否则
+# paths 会把 USER_DATA_DIR 算成 " \dsh-helper" 这种空格目录，启动即崩（实测：
+# cmd 的 `set "VAR= "` 会留下一个空格；正常 unset 才是真空）。必须在 import
+# template.paths **之前**清洗——USER_DATA_DIR 在模块导入时就算死了。
+for _env_name in ("DSH_HELPER_DATA_DIR", "LOCALAPPDATA", "XDG_DATA_HOME"):
+    if _env_name in os.environ and not os.environ[_env_name].strip():
+        del os.environ[_env_name]
 
 from template import autostart, i18n, log_kit, paths, tray_icons, tray_kit, update_helper, update_ui   # noqa: E402
 from template.appconfig import APP_ID, ICON_ASSET as ICON_ASSET_REL   # noqa: E402
@@ -104,6 +113,15 @@ VALIDATION_FAILURE_NOTIFY_DELAY_SEC = 2.0
 DSH_CMD_VALIDATE_TIMEOUT_SEC = 45
 # 默认固定端口：与 dsh web 官方兜底端口（3080）一致；该端口被占用时本次回退为自动端口。
 DEFAULT_PORT = 3080
+
+# ---- dsh 升级助手 -----------------------------------------------------------
+# 报告/记录住**用户数据区**（不进安装目录：OTA 更新会覆盖安装目录，而升级记录要
+# 长期留存、供多次升级对比）。profile 默认 web——本工具管理的一直是 dsh web。
+DSH_UPGRADE_REPORT_DIR = USER_DATA_DIR / "upgrade" / "reports"
+DSH_UPGRADE_RECORD_DIR = USER_DATA_DIR / "upgrade" / "records"
+DSH_UPGRADE_PROFILE = "web"
+# `dsh --version` 是 Node CLI，冷启动慢；仅报告里的「运行中版本」用，给足超时。
+DSH_VERSION_TIMEOUT_SEC = 20
 
 DEFAULT_CONFIG = {
     "dsh_cmd": "",
@@ -336,6 +354,254 @@ def discover_dsh_command_candidates():
             seen.add(key)
             candidates.append(candidate)
     return candidates
+
+
+# ---- dsh 升级助手：semver 范围匹配 ------------------------------------------
+# dsh 插件用 npm semver 声明宿主版本范围（engines.dsh / peerDependencies）。判据必须
+# 与 dsh 运行时一致（dsh-app-boot 的 unmetRequirements）：
+#   · engines.dsh 存在时**独自决定**，peerDependencies 忽略；
+#   · 否则每个 @deepseek-ai/dsh 或 @deepseek-ai/dsh-* peer 都**必须**满足（不是任一）；
+#   · workspace:^ / ~ / * peer 指当前宿主，恒满足；
+#   · includePrerelease：prerelease 版本参与范围匹配（0.2.2-rc.1 要能命中 >=0.2.0）。
+# 这里实现 npm semver 的子集（^ ~ >= > < <= = 裸版本 + 空格 AND + || OR），不引第三方
+# 依赖：打包态不自带 packaging/semver，自写可避免「开发机能跑、冻结包判错」。
+_SEMVER_RE = re.compile(
+    r"^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$"
+)
+_RANGE_VERSION_RE = re.compile(
+    r"^v?(\d+|[xX*])(?:\.(\d+|[xX*]))?(?:\.(\d+|[xX*]))?(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$"
+)
+_RANGE_OPS = (">=", "<=", ">", "<", "=", "^", "~")
+_WORKSPACE_PEERS = ("workspace:^", "workspace:~", "workspace:*")
+# npm 范围上界的 `-0`：单个数字标识符 "0" 的编码（数字标识符 < 非数字）。
+_PRERELEASE_ZERO = ((0, 0, ""),)
+
+
+def _prerelease_key(text):
+    """prerelease 标识符元组；数字标识符 < 非数字标识符（semver 优先级规则）。"""
+    if not text:
+        return ()
+    parts = []
+    for ident in str(text).split("."):
+        if ident == "":
+            return None
+        if ident.isdigit():
+            parts.append((0, int(ident), ""))
+        else:
+            parts.append((1, 0, ident))
+    return tuple(parts)
+
+
+def _parse_semver(text):
+    """解析具体版本；返回 (major, minor, patch, prerelease) 或 None。"""
+    if not text:
+        return None
+    match = _SEMVER_RE.match(str(text).strip())
+    if not match:
+        return None
+    pre = _prerelease_key(match.group(4)) if match.group(4) else ()
+    if pre is None:
+        return None
+    return (int(match.group(1)), int(match.group(2) or 0), int(match.group(3) or 0), pre)
+
+
+def _parse_range_version(text):
+    """解析范围里的版本 token；返回 (major, minor, patch, pre, specified) 或 None。
+
+    ``specified`` = 明确写出的数字段数（1..3），供 `~` 判断上界用；
+    通配符段（x/X/*）视为未指定、值按 0 处理。
+    """
+    if not text:
+        return None
+    match = _RANGE_VERSION_RE.match(str(text).strip())
+    if not match:
+        return None
+    vals = []
+    specified = 0
+    for raw in match.groups()[:3]:
+        if raw is None or raw in ("x", "X", "*"):
+            vals.append(0)
+        else:
+            vals.append(int(raw))
+            specified += 1
+    if specified == 0:
+        return None
+    pre = _prerelease_key(match.group(4)) if match.group(4) else ()
+    if pre is None:
+        return None
+    return (vals[0], vals[1], vals[2], pre, specified)
+
+
+def _semver_cmp(left, right):
+    """semver 优先级比较；返回 -1/0/1。release > 同版本号的 prerelease。"""
+    if left[:3] != right[:3]:
+        return -1 if left[:3] < right[:3] else 1
+    if left[3] == right[3]:
+        return 0
+    if not left[3]:
+        return 1
+    if not right[3]:
+        return -1
+    return -1 if left[3] < right[3] else 1
+
+
+def _caret_bounds(target):
+    """^ 的上下界；上界带 `-0`，与 npm 一致（^0.2.2-rc.1 = >=0.2.2-rc.1 <0.3.0-0）。"""
+    major, minor, patch, pre, specified = target
+    lower = (major, minor, patch, pre)
+    if major > 0:
+        upper = (major + 1, 0, 0, _PRERELEASE_ZERO)
+    elif minor > 0:
+        upper = (0, minor + 1, 0, _PRERELEASE_ZERO)
+    elif specified >= 3:
+        upper = (0, 0, patch + 1, _PRERELEASE_ZERO)
+    elif specified == 2:
+        upper = (0, 1, 0, _PRERELEASE_ZERO)
+    else:
+        upper = (1, 0, 0, _PRERELEASE_ZERO)
+    return lower, upper
+
+
+def _tilde_bounds(target):
+    """~ 的上下界；~1.2.3 = >=1.2.3 <1.3.0-0，~1 = >=1.0.0 <2.0.0-0。"""
+    major, minor, patch, pre, specified = target
+    lower = (major, minor, patch, pre)
+    if specified == 1:
+        upper = (major + 1, 0, 0, _PRERELEASE_ZERO)
+    else:
+        upper = (major, minor + 1, 0, _PRERELEASE_ZERO)
+    return lower, upper
+
+
+def _match_range_token(version, token):
+    """单个比较 token 是否命中（含操作符展开）。"""
+    token = token.strip()
+    if not token or token in ("*", "x", "X"):
+        return True
+    op = "="
+    rhs = token
+    for candidate in _RANGE_OPS:
+        if token.startswith(candidate):
+            op = candidate
+            rhs = token[len(candidate):].strip()
+            break
+    if rhs in ("*", "x", "X"):
+        return True
+    target = _parse_range_version(rhs)
+    if target is None:
+        return False
+    if op == "^":
+        lower, upper = _caret_bounds(target)
+        return _semver_cmp(version, lower) >= 0 and _semver_cmp(version, upper) < 0
+    if op == "~":
+        lower, upper = _tilde_bounds(target)
+        return _semver_cmp(version, lower) >= 0 and _semver_cmp(version, upper) < 0
+    result = _semver_cmp(version, (target[0], target[1], target[2], target[3]))
+    if op == "=":
+        return result == 0
+    if op == ">=":
+        return result >= 0
+    if op == "<=":
+        return result <= 0
+    if op == ">":
+        return result > 0
+    if op == "<":
+        return result < 0
+    return False
+
+
+def version_in_range(version, range_text):
+    """npm semver 范围匹配（includePrerelease）。`||` 任一命中、组内 AND 全命中。"""
+    parsed = _parse_semver(version)
+    if parsed is None:
+        return False
+    text = str(range_text or "").strip()
+    if not text:
+        return False
+    for group in text.split("||"):
+        tokens = group.split()
+        if tokens and all(_match_range_token(parsed, token) for token in tokens):
+            return True
+    return False
+
+
+# ---- dsh 升级助手：安装版本读取 ---------------------------------------------
+# 主读全局包清单（快、确定，不起 Node）；`dsh --version` 只用于报告里的运行态校验。
+_DSH_VERSION_CACHE = {"key": None, "done": False, "state": "missing", "version": None}
+
+
+def _read_dsh_version_state(command):
+    """读 dsh 安装版本；返回 (state, version)。state ∈ ok / missing / error。"""
+    if not command:
+        return "missing", None
+    prefix = Path(command).parent
+    candidates = (
+        prefix / "node_modules" / "@deepseek-ai" / "dsh" / "package.json",
+        prefix.parent / "node_modules" / "@deepseek-ai" / "dsh" / "package.json",
+    )
+    found = False
+    for pkg in candidates:
+        try:
+            if not pkg.is_file():
+                continue
+            found = True
+            data = json.loads(pkg.read_text(encoding="utf-8"))
+            version = str(data.get("version") or "").strip()
+            return ("ok", version) if version else ("error", None)
+        except (OSError, ValueError):
+            continue
+    return ("error", None) if found else ("missing", None)
+
+
+def _dsh_version_cached():
+    """带缓存的读取；refresh_state() 会令缓存失效（升级后 60s 内菜单自动更新）。"""
+    key = resolve_dsh_command()
+    if not _DSH_VERSION_CACHE["done"] or _DSH_VERSION_CACHE["key"] != key:
+        _DSH_VERSION_CACHE["key"] = key
+        _DSH_VERSION_CACHE["done"] = True
+        _DSH_VERSION_CACHE["state"], _DSH_VERSION_CACHE["version"] = _read_dsh_version_state(key)
+    return _DSH_VERSION_CACHE["state"], _DSH_VERSION_CACHE["version"]
+
+
+def dsh_install_version():
+    """当前全局安装的 dsh 版本；读不到返回 None。"""
+    return _dsh_version_cached()[1]
+
+
+def dsh_version_line():
+    """菜单版本行：已安装显示版本，未安装/读取失败分别给结论（对齐 reme-helper）。"""
+    state, version = _dsh_version_cached()
+    if state == "ok":
+        return i18n.t("menu_dsh_version", version)
+    if state == "error":
+        return i18n.t("menu_dsh_version", i18n.t("menu_dsh_version_error"))
+    return i18n.t("menu_dsh_version", i18n.t("menu_dsh_version_missing"))
+
+
+def dsh_cli_version(timeout=DSH_VERSION_TIMEOUT_SEC):
+    """运行 `dsh --version` 取版本（Node 冷启动慢，仅报告里用）；失败返回 None。"""
+    command = resolve_dsh_command()
+    if not command:
+        return None
+    try:
+        result = subprocess.run(
+            [command, "--version"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            creationflags=CREATE_NO_WINDOW,
+            cwd=str(Path(command).parent),
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log(f"dsh --version failed: {exc}")
+        return None
+    if result.returncode != 0:
+        return None
+    return (result.stdout or "").strip() or None
 
 
 def port_is_available(host, port):
@@ -731,6 +997,8 @@ def report_runtime_start_failure(command_path, detail):
 def refresh_state():
     """刷新托盘中显示的状态，不主动启动或停止进程。"""
     global MANAGED_PROCESS
+    # dsh 版本行也住缓存：升级（外部改包）后让下一次菜单重画读到新版本。
+    _DSH_VERSION_CACHE["done"] = False
     current = state_copy()
     proc = MANAGED_PROCESS
     if proc is not None and proc.poll() is not None:
@@ -910,9 +1178,10 @@ def run_action(label, func):
     threading.Thread(target=worker, name=f"dsh-{label}", daemon=True).start()
 
 
-def copy_to_clipboard(text):
+def _copy_text(text, success_key, empty_key="notify_no_url"):
+    """通用剪贴板：成功/失败文案由调用方给键（URL 与升级命令共用一条链路）。"""
     if not text:
-        notify(i18n.t("notify_no_url"))
+        notify(i18n.t(empty_key))
         return
     try:
         root = tk.Tk()
@@ -922,10 +1191,14 @@ def copy_to_clipboard(text):
         root.update()
         root.after(250, root.destroy)
         root.mainloop()
-        notify(i18n.t("notify_url_copied"))
+        notify(i18n.t(success_key))
     except Exception as exc:
         log(f"clipboard failed: {exc}")
         notify(i18n.t("notify_copy_failed", exc))
+
+
+def copy_to_clipboard(text):
+    _copy_text(text, "notify_url_copied")
 
 
 def notify(message):
@@ -950,6 +1223,7 @@ def _menu_signature():
 
     **漏一项 = 那一项变了菜单不刷新**。逐项对照 build_menu()：
       · 信息行 status_line()   ← phase / command_status / managed / message / pid
+      · dsh 版本行             ← 全局安装的 dsh 版本（升级后菜单自动刷新）
       · 地址行与「复制/打开面板」的 enabled ← url
       · 「下载并更新」的 enabled ← LATEST_VERSION
       · 启停重试的 enabled ← phase / pid（就绪判定用的也是 command_status）
@@ -964,6 +1238,7 @@ def _menu_signature():
         i18n.current_lang(),
         state["phase"], state["command_status"], state["managed"],
         state["message"], state["pid"], state["url"],
+        dsh_version_line(),
         LATEST_VERSION is not None,
         autostart.is_autostart_enabled(),
         bool(CFG.get("start_on_launch", False)),
@@ -1614,11 +1889,437 @@ def _download_update_worker(latest):
     update_menu()
 
 
+# ---- dsh 升级助手：兼容性检查 / 报告 / 记录 / 菜单 --------------------------
+# 边界（与产品约定）：**只做静态检查与引导**，不自动升级、不自动停机。判据与 dsh
+# 运行时一致（见 dsh-app-boot 的 unmetRequirements），另读 profile 的 compatibility.json
+# 精确豁免（dsh plugin allow-version 的落盘形态）。
+
+
+def dsh_profile_dir(profile=DSH_UPGRADE_PROFILE):
+    """dsh profile 目录：$DSH_HOME 优先，否则 ~/.dsh（与 dsh 运行时同一约定）。"""
+    root = os.environ.get("DSH_HOME", "").strip() or str(Path.home() / ".dsh")
+    return Path(root) / "profiles" / profile
+
+
+def _profile_manifest(profile_dir):
+    try:
+        path = profile_dir / "package.json"
+        if not path.is_file():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _profile_plugin_names(profile_dir):
+    """插件名 = dependencies 全部 + dsh.profile.bundles 里**真实装在本 profile** 的。
+
+    bundles 含官方包（@deepseek-ai/dsh-base 等），它们不在 profile 的 node_modules 里，
+    用「有没有 package.json」自然过滤掉，避免报告里出现一堆官方包噪音。
+    """
+    manifest = _profile_manifest(profile_dir)
+    if not isinstance(manifest, dict):
+        return []
+    names = []
+    seen = set()
+    for name in (manifest.get("dependencies") or {}):
+        if isinstance(name, str) and name not in seen:
+            seen.add(name)
+            names.append(name)
+    bundles = ((manifest.get("dsh") or {}).get("profile") or {}).get("bundles") or []
+    for name in bundles:
+        if not isinstance(name, str) or name in seen:
+            continue
+        if (profile_dir / "node_modules" / name / "package.json").is_file():
+            seen.add(name)
+            names.append(name)
+    return names
+
+
+def _plugin_manifest(profile_dir, name):
+    try:
+        path = profile_dir / "node_modules" / name / "package.json"
+        if not path.is_file():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _load_exemptions(profile_dir):
+    """profile 的 compatibility.json：``{name@version: [exact runtime versions]}``。"""
+    try:
+        data = json.loads((profile_dir / "compatibility.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _is_exempted(exemptions, name, version, target):
+    values = exemptions.get(f"{name}@{version}")
+    return isinstance(values, list) and target in values
+
+
+def _check_criteria_a(manifest, target):
+    """判据 A：engines.dsh 独自决定；否则所有 @deepseek-ai/dsh(-*) peer 都必须满足。"""
+    engines = manifest.get("engines")
+    engines_dsh = engines.get("dsh") if isinstance(engines, dict) else None
+    if engines_dsh is not None:
+        if not isinstance(engines_dsh, str) or not engines_dsh.strip():
+            return None, i18n.t("report_engine_invalid")
+        return version_in_range(target, engines_dsh), i18n.t("report_engine_dsh", engines_dsh)
+    peers = {k: v for k, v in (manifest.get("peerDependencies") or {}).items()
+             if isinstance(k, str) and (k == "@deepseek-ai/dsh" or k.startswith("@deepseek-ai/dsh-"))}
+    if not peers:
+        return None, i18n.t("report_no_declaration")
+    unmet = {}
+    for peer_name, rng in peers.items():
+        if not isinstance(rng, str):
+            continue
+        if rng.strip() in _WORKSPACE_PEERS:
+            continue
+        if not version_in_range(target, rng):
+            unmet[peer_name] = rng
+    if unmet:
+        return False, i18n.t("report_peer_unmet",
+                             ", ".join(f"{k}={v}" for k, v in unmet.items()))
+    return True, i18n.t("report_peer_ok", len(peers))
+
+
+def _check_criteria_c(manifest):
+    """判据 C：dependencies 里硬编码 @deepseek-ai/dsh-* 宿主包（高风险，启动即崩）。"""
+    deps = {k: v for k, v in (manifest.get("dependencies") or {}).items()
+            if isinstance(k, str) and k.startswith("@deepseek-ai/dsh-")}
+    if not deps:
+        return True, i18n.t("report_no_hardcode")
+    return False, i18n.t("report_deps_hardcoded",
+                         ", ".join(f"{k}={v}" for k, v in deps.items()))
+
+
+def _check_plugin(profile_dir, name, target, exemptions):
+    """单个插件的四判据检查。B/D 初版标记未知（B 需人工对照 CHANGELOG，D 需目标清单）。"""
+    missing = i18n.t("report_plugin_missing_manifest")
+    manifest = _plugin_manifest(profile_dir, name)
+    if not isinstance(manifest, dict):
+        return {"name": name, "version": "", "a": None, "a_detail": missing,
+                "b": None, "b_detail": i18n.t("report_manual_review"),
+                "c": None, "c_detail": missing, "d": None,
+                "d_detail": i18n.t("report_transitive_unknown"),
+                "conclusion": "unknown", "batch": "B", "exempted": False, "detail": missing}
+    version = str(manifest.get("version") or "").strip()
+    a_passed, a_detail = _check_criteria_a(manifest, target)
+    c_passed, c_detail = _check_criteria_c(manifest)
+    exempted = _is_exempted(exemptions, name, version, target)
+    if a_passed is False or c_passed is False:
+        conclusion = "incompatible"
+    elif a_passed is True and c_passed is True:
+        conclusion = "compatible"
+    else:
+        conclusion = "unknown"
+    if exempted and conclusion == "incompatible":
+        conclusion = "compatible"
+    detail_parts = [a_detail, c_detail]
+    if exempted:
+        detail_parts.append(i18n.t("report_exempted_note"))
+    return {"name": name, "version": version,
+            "a": a_passed, "a_detail": a_detail,
+            "b": None, "b_detail": i18n.t("report_manual_review"),
+            "c": c_passed, "c_detail": c_detail,
+            "d": None, "d_detail": i18n.t("report_transitive_unknown"),
+            "conclusion": conclusion,
+            "batch": "A" if conclusion == "compatible" else "B",
+            "exempted": exempted, "detail": "；".join(detail_parts)}
+
+
+def check_plugin_compatibility(target_version, profile=DSH_UPGRADE_PROFILE):
+    """对 profile 的每个插件跑四判据，返回报告数据（run_time_version 由调用方补）。"""
+    profile_dir = dsh_profile_dir(profile)
+    exemptions = _load_exemptions(profile_dir)
+    plugins = [_check_plugin(profile_dir, name, target_version, exemptions)
+               for name in _profile_plugin_names(profile_dir)]
+    summary = {"compatible": 0, "incompatible": 0, "unknown": 0}
+    for plugin in plugins:
+        summary[plugin["conclusion"]] += 1
+    return {"generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "current_version": dsh_install_version() or "",
+            "target_version": target_version,
+            "runtime_version": "",
+            "profile": profile,
+            "profile_dir": str(profile_dir),
+            "plugins": plugins,
+            "summary": summary}
+
+
+# ---- 报告：HTML（内联 CSS，无外部依赖；文案全走 i18n） ------------------------
+_REPORT_CSS = (
+    "body{font-family:-apple-system,Segoe UI,Microsoft YaHei,sans-serif;margin:24px;"
+    "color:#222;line-height:1.5}"
+    "h1{font-size:20px;margin:0 0 8px}"
+    ".meta{color:#666;font-size:13px;margin-bottom:16px}"
+    ".meta div{margin:2px 0}"
+    ".summary{font-size:14px;margin-bottom:16px}"
+    ".pass{color:#1a7f37;font-weight:600}"
+    ".fail{color:#c0392b;font-weight:600}"
+    ".unknown{color:#b8860b;font-weight:600}"
+    "table{border-collapse:collapse;width:100%;font-size:13px}"
+    "th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:top}"
+    "th{background:#f5f5f5}"
+    ".mono{font-family:Consolas,Monaco,monospace}"
+    ".section{margin-top:24px}"
+    ".section h2{font-size:16px;border-bottom:1px solid #ddd;padding-bottom:4px}"
+    ".batch{margin:8px 0}"
+    ".risk{background:#fff8e1;border-left:4px solid #f0ad4e;padding:8px 12px}"
+    ".next{background:#e8f5e9;border-left:4px solid #1a7f37;padding:8px 12px}"
+)
+
+
+def _report_cell(passed):
+    if passed is True:
+        return '<td class="pass">%s</td>' % html_escape(i18n.t("report_pass"))
+    if passed is False:
+        return '<td class="fail">%s</td>' % html_escape(i18n.t("report_fail"))
+    return '<td class="unknown">%s</td>' % html_escape(i18n.t("report_na"))
+
+
+def _report_row(plugin):
+    conclusion_class = {
+        "compatible": "pass", "incompatible": "fail", "unknown": "unknown",
+    }[plugin["conclusion"]]
+    conclusion_text = {
+        "compatible": i18n.t("report_compatible"),
+        "incompatible": i18n.t("report_incompatible"),
+        "unknown": i18n.t("report_unknown"),
+    }[plugin["conclusion"]]
+    if plugin["exempted"]:
+        conclusion_text += " (%s)" % html_escape(i18n.t("report_exempted"))
+    return ("<tr><td>%s</td><td class=\"mono\">%s</td>%s%s%s%s"
+            "<td class=\"%s\">%s</td><td>%s</td></tr>") % (
+        html_escape(plugin["name"]), html_escape(plugin["version"]),
+        _report_cell(plugin["a"]), _report_cell(plugin["b"]),
+        _report_cell(plugin["c"]), _report_cell(plugin["d"]),
+        conclusion_class, conclusion_text, html_escape(plugin["detail"]))
+
+
+def build_report_html(data):
+    """把检查数据渲染成单文件 HTML（表格 + 分批 + 风险提示）。"""
+    t = i18n.t
+    batch_a = [p for p in data["plugins"] if p["batch"] == "A"]
+    batch_b = [p for p in data["plugins"] if p["batch"] == "B"]
+    rows = "".join(_report_row(plugin) for plugin in data["plugins"])
+    batch_a_text = ", ".join("%s@%s" % (p["name"], p["version"]) for p in batch_a) or t("report_none")
+    batch_b_text = ", ".join("%s@%s" % (p["name"], p["version"]) for p in batch_b) or t("report_none")
+    risk_lines = "<br>".join(html_escape(t(key)) for key in (
+        "report_risk_static", "report_risk_manual_b", "report_risk_target_channel"))
+    next_lines = "<br>".join(html_escape(t(key)) for key in (
+        "report_next_guide", "report_next_check", "report_next_upgrade", "report_next_verify"))
+    return "".join([
+        '<!DOCTYPE html><html lang="', html_escape(i18n.current_lang()),
+        '"><head><meta charset="utf-8"><title>', html_escape(t("report_title")),
+        '</title><style>', _REPORT_CSS, '</style></head><body>',
+        '<h1>', html_escape(t("report_title")), '</h1>',
+        '<div class="meta">',
+        '<div>', html_escape(t("report_generated_at")), ': <span class="mono">',
+        html_escape(data["generated_at"]), '</span></div>',
+        '<div>', html_escape(t("report_current_version")), ': <span class="mono">',
+        html_escape(data["current_version"] or t("menu_dsh_version_missing")),
+        '</span> &rarr; ', html_escape(t("report_target_version")),
+        ': <span class="mono">', html_escape(data["target_version"]), '</span></div>',
+        '<div>', html_escape(t("report_runtime_version")), ': <span class="mono">',
+        html_escape(data["runtime_version"] or t("report_na")), '</span></div>',
+        '<div>', html_escape(t("report_profile")), ': <span class="mono">',
+        html_escape(data["profile"]), '</span> (<span class="mono">',
+        html_escape(data["profile_dir"]), '</span>)</div>',
+        '</div>',
+        '<div class="summary">',
+        '<span class="pass">', html_escape(t("report_compatible")), ': ',
+        str(data["summary"]["compatible"]), '</span> &middot; ',
+        '<span class="fail">', html_escape(t("report_incompatible")), ': ',
+        str(data["summary"]["incompatible"]), '</span> &middot; ',
+        '<span class="unknown">', html_escape(t("report_unknown")), ': ',
+        str(data["summary"]["unknown"]), '</span>',
+        '</div>',
+        '<div class="section"><h2>', html_escape(t("report_plugin_details")), '</h2>',
+        '<table><thead><tr>',
+        '<th>', html_escape(t("report_plugin_col")), '</th>',
+        '<th>', html_escape(t("report_version_col")), '</th>',
+        '<th>A</th><th>B</th><th>C</th><th>D</th>',
+        '<th>', html_escape(t("report_conclusion_col")), '</th>',
+        '<th>', html_escape(t("report_detail_col")), '</th>',
+        '</tr></thead><tbody>', rows, '</tbody></table></div>',
+        '<div class="section"><h2>', html_escape(t("report_suggested_order")), '</h2>',
+        '<div class="batch"><b>', html_escape(t("report_batch_a")), '</b><br>',
+        html_escape(batch_a_text), '</div>',
+        '<div class="batch"><b>', html_escape(t("report_batch_b")), '</b><br>',
+        html_escape(batch_b_text), '</div></div>',
+        '<div class="section risk"><b>', html_escape(t("report_risk_title")),
+        '</b><br>', risk_lines, '</div>',
+        '<div class="section next"><b>', html_escape(t("report_next_steps")),
+        '</b><br>', next_lines, '</div>',
+        '</body></html>',
+    ])
+
+
+def save_report(html):
+    """报告存用户数据区（OTA 更新不覆盖）；返回路径。"""
+    DSH_UPGRADE_REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    path = DSH_UPGRADE_REPORT_DIR / ("%s.html" % time.strftime("%Y%m%d-%H%M%S"))
+    path.write_text(html, encoding="utf-8")
+    return path
+
+
+def open_report(path):
+    try:
+        os.startfile(str(path))  # noqa: S606 - 浏览器/默认程序打开
+    except OSError as exc:
+        log(f"open upgrade report failed: {exc}")
+        notify(i18n.t("notify_open_failed", exc))
+
+
+# ---- 升级记录：一个升级批次一个 Markdown，追加不覆盖 -----------------------
+_UPGRADE_RECORD = {"path": None}
+
+
+def _record_path_for(from_version, to_version):
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    return DSH_UPGRADE_RECORD_DIR / ("%s-%s-to-%s.md" % (
+        ts, from_version or "unknown", to_version or "unknown"))
+
+
+def start_upgrade_record(from_version, to_version):
+    """开一个升级批次记录（写表头）；返回路径。"""
+    path = _record_path_for(from_version, to_version)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# " + i18n.t("record_title"),
+        "",
+        "- " + i18n.t("record_current") + ": " + (from_version or i18n.t("menu_dsh_version_missing")),
+        "- " + i18n.t("record_target") + ": " + (to_version or ""),
+        "- " + i18n.t("record_started_at") + ": " + time.strftime("%Y-%m-%d %H:%M:%S"),
+        "",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
+    _UPGRADE_RECORD["path"] = path
+    return path
+
+
+def append_record(section, content):
+    """追加到当前批次记录；没有批次时按当前版本开一个。"""
+    path = _UPGRADE_RECORD["path"] or _record_path_for(dsh_install_version(), "")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("\n## %s\n%s\n" % (section, content))
+    return path
+
+
+def _record_summary(data):
+    lines = [
+        "- %s: %d" % (i18n.t("report_compatible"), data["summary"]["compatible"]),
+        "- %s: %d" % (i18n.t("report_incompatible"), data["summary"]["incompatible"]),
+        "- %s: %d" % (i18n.t("report_unknown"), data["summary"]["unknown"]),
+    ]
+    for plugin in data["plugins"]:
+        conclusion = {
+            "compatible": i18n.t("report_compatible"),
+            "incompatible": i18n.t("report_incompatible"),
+            "unknown": i18n.t("report_unknown"),
+        }[plugin["conclusion"]]
+        lines.append("- %s@%s: %s" % (plugin["name"], plugin["version"], conclusion))
+    return "\n".join(lines)
+
+
+# ---- 菜单接线 ---------------------------------------------------------------
+def _ask_target_version_dialog(current):
+    """目标版本输入弹窗（默认填当前安装版本）；返回字符串或 None。"""
+    return simpledialog.askstring(
+        i18n.t("dlg_upgrade_target_title"),
+        i18n.t("dlg_upgrade_target_text", current or i18n.t("menu_dsh_version_missing")),
+        initialvalue=current or "",
+    )
+
+
+def check_upgrade_compatibility_menu(_icon=None, _item=None):
+    """托盘「检查插件兼容性」：静态检查 → HTML 报告 → 浏览器打开，全程后台线程。"""
+    current = dsh_install_version() or ""
+    target = ui_post(lambda: _ask_target_version_dialog(current))
+    if not target or not str(target).strip():
+        return
+    target = str(target).strip()
+    if not _parse_semver(target):
+        notify(i18n.t("notify_upgrade_target_invalid", target))
+        return
+    notify(i18n.t("notify_upgrade_checking"))
+    start_upgrade_record(current, target)
+    threading.Thread(target=_compat_check_worker, args=(target,),
+                     name="dsh-compat-check", daemon=True).start()
+
+
+def _compat_check_worker(target):
+    try:
+        data = check_plugin_compatibility(target)
+        # 运行态校验（dsh --version）是 Node 冷启动，只在这条后台线程里做。
+        data["runtime_version"] = dsh_cli_version()
+        path = save_report(build_report_html(data))
+        append_record(i18n.t("record_section_check"), _record_summary(data))
+        open_report(path)
+        notify(i18n.t("notify_upgrade_report_ready", path))
+        update_menu()
+    except Exception as exc:  # noqa: BLE001 - 检查链路失败要留痕、要给用户结论
+        log(f"upgrade compat check failed: {exc}")
+        notify(i18n.t("notify_upgrade_check_failed", exc))
+
+
+def copy_upgrade_command_menu(_icon=None, _item=None):
+    """托盘「复制升级命令」：显式版本号的 npm 全局安装命令（不依赖 latest 通道）。"""
+    current = dsh_install_version() or ""
+    target = ui_post(lambda: _ask_target_version_dialog(current))
+    if not target or not str(target).strip():
+        return
+    target = str(target).strip()
+    if not _parse_semver(target):
+        notify(i18n.t("notify_upgrade_target_invalid", target))
+        return
+    cmd = 'npm i -g "@deepseek-ai/dsh@%s"' % target
+    start_upgrade_record(current, target)
+    append_record(i18n.t("record_section_command"), cmd)
+    ui_post(lambda: _copy_text(cmd, "notify_cmd_copied"))
+
+
+def open_upgrade_guide(_icon=None, _item=None):
+    path = APP_DIR / "doc" / "dsh-upgrade-guide.md"
+    if not path.is_file():
+        notify(i18n.t("notify_upgrade_doc_missing", str(path)))
+        return
+    try:
+        os.startfile(str(path))  # noqa: S606
+    except OSError as exc:
+        log(f"open upgrade guide failed: {exc}")
+        notify(i18n.t("notify_open_failed", exc))
+
+
+def open_upgrade_records(_icon=None, _item=None):
+    try:
+        DSH_UPGRADE_RECORD_DIR.mkdir(parents=True, exist_ok=True)
+        os.startfile(str(DSH_UPGRADE_RECORD_DIR))  # noqa: S606
+    except OSError as exc:
+        log(f"open upgrade records failed: {exc}")
+        notify(i18n.t("notify_open_failed", exc))
+
+
+def build_dsh_upgrade_menu():
+    return pystray.Menu(
+        pystray.MenuItem(i18n.t("menu_upgrade_check"), check_upgrade_compatibility_menu),
+        pystray.MenuItem(i18n.t("menu_upgrade_open_doc"), open_upgrade_guide),
+        pystray.MenuItem(i18n.t("menu_upgrade_open_records"), open_upgrade_records),
+        pystray.MenuItem(i18n.t("menu_upgrade_copy_cmd"), copy_upgrade_command_menu),
+    )
+
+
 def build_menu():
     """家族标准八段式：信息 → 更新 → 默认入口 → 服务控制 → 业务 → 打开 → 偏好 → 退出。"""
     return pystray.Menu(
         # ① 信息区（只读）
         pystray.MenuItem(lambda _item: f"{APP_NAME} v{VERSION}", None, enabled=False),
+        pystray.MenuItem(lambda _item: dsh_version_line(), None, enabled=False),
         pystray.MenuItem(lambda _item: status_line(), None, enabled=False),
         pystray.MenuItem(lambda _item: url_line(), None, enabled=False),
         #复制紧贴地址行，是获取完整 URL（含 token）的唯一入口
@@ -1643,6 +2344,7 @@ def build_menu():
         pystray.Menu.SEPARATOR,
         # ⑤ 业务区
         pystray.MenuItem(i18n.t("menu_dsh_cmd"), build_dsh_command_menu()),
+        pystray.MenuItem(i18n.t("menu_dsh_upgrade"), build_dsh_upgrade_menu()),
         pystray.Menu.SEPARATOR,
         # ⑥ 打开区
         pystray.MenuItem(i18n.t("menu_open_config"), open_config),
@@ -1662,12 +2364,42 @@ def build_menu():
     )
 
 
+def _mutex_name_is_valid(app_id):
+    """互斥体名合法性 = 模板探针 + ERROR_ACCESS_DENIED 容错。
+
+    模板 `tray_kit.mutex_name_is_valid` 把 ERROR_ACCESS_DENIED(5) 判成非法，但
+    **err=5 恰恰证明内核认得这个名字**：互斥体已存在，只是被另一个完整性级别更高
+    的进程持有、当前进程（典型：DSH sandbox 给工作区打了 Low 强制完整性标签，
+    release\\ 里的 exe 以 Low 运行）没权限打开。这与 ERROR_ALREADY_EXISTS(183)
+    同为「名字合法」；真正的「名字非法」是 ERROR_INVALID_NAME(1200)，不会混淆。
+    不修模板（submodule），只在冒烟这一侧补一次同源探针。
+    """
+    if tray_kit.mutex_name_is_valid(app_id):
+        return True
+    # 模板判非法 → 补一次探针。名字形状仍由模板的 mutex_name_ok 判定（单一真源）；
+    # 名字串按模板 `_derive_mutex_name` 的口径重建（该函数未导出，无法直接调用）。
+    name = "Local\\%s-single-instance" % app_id
+    if not tray_kit.mutex_name_ok(name):
+        return False
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+    k32.CreateMutexW.restype = wintypes.HANDLE
+    ctypes.set_last_error(0)
+    handle = k32.CreateMutexW(None, False, name)
+    err = ctypes.get_last_error()
+    if handle:
+        k32.CloseHandle(handle)
+    return bool(handle) or err in (183, 5)   # ERROR_ALREADY_EXISTS / ERROR_ACCESS_DENIED
+
+
 def smoke():
     """构建冒烟测试：验证依赖、配置、守卫探针和 dsh 命令发现，不启动常驻服务。"""
     try:
         # D3.1 / 判据·smoke不绕 守卫覆盖探针：名字合法性（不占锁、不弹窗）。守卫坏了 3 个月
         # 而构建全绿的根因就是探针缺失——冒烟必须与运行期守卫问同一个名字。
-        if not tray_kit.mutex_name_is_valid(APP_ID):
+        if not _mutex_name_is_valid(APP_ID):
             raise RuntimeError("mutex name is illegal for %s" % APP_ID)
         command = resolve_dsh_command()
         if not command:
