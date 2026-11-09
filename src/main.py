@@ -35,7 +35,7 @@ for _env_name in ("DSH_HELPER_DATA_DIR", "LOCALAPPDATA", "XDG_DATA_HOME"):
     if _env_name in os.environ and not os.environ[_env_name].strip():
         del os.environ[_env_name]
 
-from template import autostart, i18n, log_kit, paths, tray_icons, tray_kit, update_helper, update_ui   # noqa: E402
+from template import autostart, i18n, log_kit, paths, temp_kit, tray_icons, tray_kit, update_helper, update_ui   # noqa: E402
 from template.appconfig import APP_ID, ICON_ASSET as ICON_ASSET_REL   # noqa: E402
 
 
@@ -2508,24 +2508,15 @@ def _startup_failure_text(exc, detail) -> str:
 
 
 def _write_startup_failure_log(text):
-    """best-effort 写崩溃信息：日志目录 → 程序目录 → %TEMP%；全失败返回 None。"""
-    temp_root = os.environ.get("TEMP") or os.environ.get("TMP") or ""
-    candidates = [
-        LOG_DIR / (APP_ID + ".log"),
-        APP_DIR / "startup-error.log",
-        Path(temp_root) / (APP_ID + "-startup-error.log") if temp_root else None,
-    ]
-    for path in candidates:
-        if path is None:
-            continue
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with open(path, "a", encoding="utf-8") as fh:
-                fh.write("[%s] %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), text))
-            return path
-        except Exception:  # noqa: BLE001 - 换下一个落点
-            continue
-    return None
+    """写崩溃日志：``<LOG_DIR>\\crash\\startup-<时间戳>-<随机>.log``（一件一文件，保留 10 份）。
+
+    走模板标准件 temp_kit：**不放临时目录**（会被清理，证据会丢）、**不用 %TEMP% 兜底**
+    （%TEMP% 语义是可随时删，与"保留证据"矛盾）。写失败绝不拦住退出。
+    """
+    try:
+        return temp_kit.write_crash_log("startup", text, directory=LOG_DIR / "crash")
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _message_box(text, title=None) -> bool:
@@ -2597,6 +2588,12 @@ def main() -> int:
     # 源码扫描原理上覆盖不到它们；能定死归属的只有**产物自带的这行日志**。
     log("data root: %s" % USER_DATA_DIR)
     log("config   : %s" % CONFIG_PATH)
+    # 临时目录清扫（temp_kit）：保留最近 3 个 + 清 24h 前的残留。启动时做一次，兜住
+    # 上次进程被硬杀（退出钩子没机会跑）留下的临时目录。失败只记一行，绝不拦住启动。
+    try:
+        temp_kit.sweep(log=log)
+    except Exception as exc:  # noqa: BLE001
+        log(f"temp sweep failed: {exc}")
     # exe-delete-guard（paths 1.1.4，MUST-WIRE）：让"本实例的 exe 不可被删除/改名"由**内核**保证，
     # 而不是由纪律保证。持有的是一个**不含 FILE_SHARE_DELETE** 的句柄 ⇒ 删除方（构建脚本 /
     # 手工 `rm -r` / 未来的 --clean）会**大声失败**，而不是把正在运行的实例目录静默掏空

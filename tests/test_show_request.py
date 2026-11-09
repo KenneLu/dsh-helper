@@ -4,16 +4,16 @@
 不启托盘 GUI：全部用 mock（notify 被替换成记录器）。
 """
 import os
-import shutil
 import sys
-import tempfile
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "src"
-_TMP = tempfile.mkdtemp(prefix="dsh-helper-show-")
+sys.path.insert(0, str(SRC))
+from _cleanup import rmtree_cleanup, scratch, scratch_dir  # noqa: E402
+
+_TMP = scratch_dir("dsh-helper-show-")
 os.environ["DSH_HELPER_DATA_DIR"] = _TMP
 os.environ.pop("DSH_HELPER_CONFIG", None)
-sys.path.insert(0, str(SRC))
 
 import main  # noqa: E402
 
@@ -30,7 +30,7 @@ saved_show_path = main.SHOW_REQUEST_PATH
 saved_notify = main.notify
 saved_tray = main.TRAY_ICON
 try:
-    with tempfile.TemporaryDirectory(prefix="dsh-helper-show-req-") as temp:
+    with scratch("dsh-helper-show-req-") as temp:
         main.SHOW_REQUEST_PATH = Path(temp) / "data" / "show.request"
 
         rc = main.request_show_existing()
@@ -62,7 +62,7 @@ finally:
     main.SHOW_REQUEST_PATH = saved_show_path
     main.notify = saved_notify
     main.TRAY_ICON = saved_tray
-    shutil.rmtree(_TMP, ignore_errors=True)
+    check("temp dir cleaned up (no leak)", rmtree_cleanup(_TMP), str(_TMP))
 
 print("SHOW REQUEST TEST " + ("FAILED: " + ",".join(FAILS) if FAILS else "OK"), flush=True)
 sys.exit(1 if FAILS else 0)

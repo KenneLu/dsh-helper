@@ -4,16 +4,16 @@
 离线运行：fake Icon 抛 PermissionError、fake ctypes 记录 MessageBoxW、无头入口不弹窗。
 """
 import os
-import shutil
 import sys
-import tempfile
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "src"
-_TMP = tempfile.mkdtemp(prefix="dsh-helper-startup-")
+sys.path.insert(0, str(SRC))
+from _cleanup import rmtree_cleanup, scratch, scratch_dir  # noqa: E402
+
+_TMP = scratch_dir("dsh-helper-startup-")
 os.environ["DSH_HELPER_DATA_DIR"] = _TMP
 os.environ.pop("DSH_HELPER_CONFIG", None)
-sys.path.insert(0, str(SRC))
 
 import main  # noqa: E402
 
@@ -61,31 +61,25 @@ try:
 finally:
     main.LOG_INIT_ERROR = saved_log_error
 
-# ---------------- ② 崩溃日志 best-effort 多落点 ----------------
-with tempfile.TemporaryDirectory(prefix="dsh-helper-crash-") as temp:
+# ---------------- ② 崩溃日志：LOG_DIR/crash/ 一件一文件，写不了返回 None ----------------
+with scratch("dsh-helper-crash-") as temp:
     root = Path(temp)
-    saved_dirs = (main.LOG_DIR, main.APP_DIR)
-    saved_temp = os.environ.get("TEMP")
+    saved_dir = main.LOG_DIR
     try:
         main.LOG_DIR = root / "log"
-        main.APP_DIR = root / "app"
         first = main._write_startup_failure_log("boom-1")
-        check("crash log written to the first available path",
+        check("crash log written under LOG_DIR/crash/",
               first is not None and "boom-1" in Path(first).read_text(encoding="utf-8"), first)
+        check("crash log is one-file-per-incident inside a crash/ subdir",
+              first is not None and first.parent.name == "crash", first)
 
         blocker = root / "blocker"
         blocker.write_text("x", encoding="utf-8")
         main.LOG_DIR = blocker / "log"
-        main.APP_DIR = blocker / "app"
-        os.environ["TEMP"] = str(blocker)
         none_path = main._write_startup_failure_log("boom-2")
-        check("all crash-log paths blocked -> None, no raise", none_path is None, none_path)
+        check("unwritable crash-log dir -> None, no raise", none_path is None, none_path)
     finally:
-        main.LOG_DIR, main.APP_DIR = saved_dirs
-        if saved_temp is None:
-            os.environ.pop("TEMP", None)
-        else:
-            os.environ["TEMP"] = saved_temp
+        main.LOG_DIR = saved_dir
 
 # ---------------- ③ MessageBoxW 兜底：失败不抛，无头入口不弹窗 ----------------
 class _FakeUser32:
@@ -140,7 +134,7 @@ try:
 finally:
     sys.argv = saved_argv
     main._message_box = saved_message_box
-    shutil.rmtree(_TMP, ignore_errors=True)
+    check("temp dir cleaned up (no leak)", rmtree_cleanup(_TMP), str(_TMP))
 
 print("STARTUP GUARD TEST " + ("FAILED: " + ",".join(FAILS) if FAILS else "OK"), flush=True)
 sys.exit(1 if FAILS else 0)

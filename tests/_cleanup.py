@@ -1,31 +1,25 @@
 # -*- coding: utf-8 -*-
-"""测试临时目录清理：先放句柄、再删、删后回读；删不掉就返回 False（由测试变红）。
+"""测试临时目录清理：统一走模板标准件 ``temp_kit``。
 
-为什么需要它（实测，不是推测）：
-  `%TEMP%` 里积了 一批 `dsh-helper` 残留，签名高度一致——残留物只有
-  `<TMP>/<app>/log/<app>.log`，有时再加一个刚写完的 `config.json`。
-  两个成因都成立：
-    ① `log_kit` 的 `RotatingFileHandler` 持有日志文件；Windows 下 Python 的
-       `open()` **不带 FILE_SHARE_DELETE**，被打开的文件删不掉；
-    ② 刚写完的 `config.json` 会被 Defender / 索引器短暂占用（瞬时锁，重试即过）。
-  `shutil.rmtree(..., ignore_errors=True)` 把这两种"删不动"都变成"看起来成功"，
-  于是泄漏无声积累（每跑一轮门禁就多几个目录）。本模块把"删干净"变成可断言的结论。
+本仓原来自己实现的 `scratch_dir` / `rmtree_cleanup`（含 `H:/Tools/_verify-scratch/` 回落）
+已并入模板标准件 `temp_kit` v1.0.0：
 
-用法（在每个建了 `mkdtemp` 的测试末尾）：
-    check("temp dir cleaned up (no %TEMP% leak)", rmtree_cleanup(_TMP), str(_TMP))
+* 路径：``%TEMP%\\<APP_ID>\\<场景>-<时间戳>-<6位随机>\\``（工具名即目录名，归属清晰）；
+* 四层清理：退出删 + 退出钩子 + 保留 N=3 + 年龄上限 24h。
+
+本模块只保留**薄封装**，让既有测试的 import 不变；新增测试建议直接
+``from template import temp_kit``。
 """
-import logging
-import os
-import shutil
+import contextlib
 import sys
-import tempfile
-import time
 from pathlib import Path
 
-# 2026-09-19 lead 裁定：测试/探针的临时目录一律放 `H:\Tools\_verify-scratch\`，
-# 不得在系统 `%TEMP%` 里留家族前缀的目录。可用 DSH_HELPER_SCRATCH_DIR 覆盖（CI 用）。
-_SCRATCH_ENV = "DSH_HELPER_SCRATCH_DIR"
-_DEFAULT_SCRATCH = r"H:\Tools\_verify-scratch"
+# template 在 src/ 下；本模块常被测试在把 src 加进 sys.path **之前** import，自己先加。
+_SRC = Path(__file__).resolve().parents[1] / "src"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+
+from template import temp_kit   # noqa: E402
 
 
 def harden_stdout():
@@ -49,56 +43,21 @@ harden_stdout()
 
 
 def scratch_dir(prefix):
-    """建一个测试临时根：优先 `H:\\Tools\\_verify-scratch\\`，不可用才回落 `%TEMP%`。
-
-    回落也必须能被 `rmtree_cleanup` 删干净——泄漏判据与位置无关。
-    """
-    base = os.environ.get(_SCRATCH_ENV) or _DEFAULT_SCRATCH
-    try:
-        p = Path(base)
-        p.mkdir(parents=True, exist_ok=True)
-        return tempfile.mkdtemp(prefix=prefix, dir=str(p))
-    except Exception:
-        return tempfile.mkdtemp(prefix=prefix)
-
-
-def _drop_log_handlers():
-    """close 并摘掉所有 logging handler——释放 RotatingFileHandler 占住的日志文件。
-
-    只 `logging.shutdown()` 不够：它 close 掉 handler 但仍留在 logger.handlers 里，
-    且 log_kit 惰性缓存的 logger 对象还在；这里两件事都做，幂等。
-    """
-    for name in list(logging.Logger.manager.loggerDict):
-        try:
-            lg = logging.getLogger(name)
-        except Exception:
-            continue
-        for h in lg.handlers[:]:
-            try:
-                h.close()
-            except Exception:
-                pass
-            try:
-                lg.removeHandler(h)
-            except Exception:
-                pass
-    try:
-        logging.shutdown()
-    except Exception:
-        pass
+    """建一个测试临时根（场景名 = prefix 去掉尾随 `-`），返回 **str**（向后兼容）。"""
+    scene = (prefix or "scratch").rstrip("-") or "scratch"
+    return str(temp_kit.scratch_dir(scene))
 
 
 def rmtree_cleanup(path, tries=10, delay=0.2):
-    """删掉测试临时目录；**返回 True 仅当删后回读确认不存在**。
+    """删掉测试临时目录；**返回 True 仅当删后回读确认不存在**。"""
+    return temp_kit.rmtree_cleanup(path, tries=tries, delay=delay)
 
-    先放句柄再删；对瞬时锁重试；每次重试前再放一次句柄（句柄可能在删除过程中
-    被重新建立——log_kit 的 `get_logger` 是惰性 + 模块级缓存）。
-    """
-    path = str(path)
-    for _ in range(max(1, tries)):
-        _drop_log_handlers()
-        shutil.rmtree(path, ignore_errors=True)
-        if not os.path.exists(path):
-            return True
-        time.sleep(delay)
-    return not os.path.exists(path)
+
+@contextlib.contextmanager
+def scratch(prefix):
+    """上下文版临时根：退出时删并回读确认（异常退出也删）；yield **str**。"""
+    path = scratch_dir(prefix)
+    try:
+        yield path
+    finally:
+        rmtree_cleanup(path)

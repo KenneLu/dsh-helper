@@ -7,11 +7,12 @@
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 SRC = REPO / "src"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _cleanup import scratch  # noqa: E402
 
 FAILS = []
 
@@ -36,7 +37,7 @@ def run_python(code, env):
     )
 
 
-with tempfile.TemporaryDirectory(prefix="dsh-helper-logfail-") as temp:
+with scratch("dsh-helper-logfail-") as temp:
     data = Path(temp) / "data"
     data.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "DSH_HELPER_DATA_DIR": str(data), "PYTHONUTF8": "1"}
