@@ -85,6 +85,21 @@ removed = temp_kit.sweep(keep=0, max_age=24 * 60 * 60)
 check("hard-crash residue swept on next sweep", removed >= 1 and not crashed.exists(),
       (removed, crashed.exists()))
 
+# ---- 用例 4b：硬杀留的「新鲜」残留——下次 sweep 在 keep=3 内**保留** ----
+# 口径：新鲜残留不因为「进程被硬杀」就被删；只有超过 keep=3 或超过 24h 才删。
+for p in _dirs():
+    rmtree_cleanup(p)
+fresh = temp_kit.scratch_dir("gate-fresh")
+removed = temp_kit.sweep(keep=3, max_age=24 * 60 * 60)
+check("fresh residue within keep=3 is kept", removed == 0 and fresh.exists(),
+      (removed, fresh.exists()))
+# 第 4 个新鲜残留进来时，最旧的那个才被删（keep=3）
+more = [temp_kit.scratch_dir("gate-fresh") for _ in range(3)]
+removed = temp_kit.sweep(keep=3, max_age=24 * 60 * 60)
+check("4th fresh residue evicts the oldest (keep=3)",
+      removed == 1 and not fresh.exists() and all(p.exists() for p in more),
+      (removed, fresh.exists(), [p.exists() for p in more]))
+
 # ---- 崩溃日志：一件一文件 + 保留 10 份 ----
 crash_dir = temp_kit.temp_root() / "crash-test"
 written = [temp_kit.write_crash_log("gate-test", "boom-%d" % i, directory=crash_dir)

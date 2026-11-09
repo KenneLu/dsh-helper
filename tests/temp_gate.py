@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""临时目录泄漏门禁（build.bat 调用）：跑测试前后扫 ``%TEMP%\\<APP_ID>\\``，新增 = 0。
+"""临时目录泄漏门禁（build.bat 调用）：跑测试前后扫 ``%TEMP%\\<APP_ID>*``，新增 = 0。
 
 用法：
     python tests/temp_gate.py --save      # 测试前：把当前条目记成基线
@@ -12,6 +12,7 @@
 避免把「过去漏的」误判成「这次漏的」。
 """
 import sys
+import tempfile
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "src"
@@ -24,11 +25,15 @@ BASELINE = Path(__file__).resolve().parents[1] / "build" / "temp-baseline.txt"
 
 
 def _entries():
-    root = temp_kit.temp_root()
+    """扫 `%TEMP%\\<APP_ID>*`——**不只扫 `%TEMP%\\<APP_ID>\\`**。
+
+    旧形态的残留是**根级**的 `%TEMP%\\<APP_ID>-<随机>`（目录或文件），
+    只扫子目录会漏掉它们。按前缀扫 `%TEMP%` 根，两种形态都罩住。
+    """
+    temp = Path(tempfile.gettempdir())
+    prefix = temp_kit.APP_ID
     try:
-        if not root.is_dir():
-            return []
-        return sorted(p.name for p in root.iterdir())
+        return sorted(p.name for p in temp.iterdir() if p.name.startswith(prefix))
     except OSError:
         return []
 
@@ -36,7 +41,8 @@ def _entries():
 def save():
     BASELINE.parent.mkdir(parents=True, exist_ok=True)
     BASELINE.write_text("\n".join(_entries()), encoding="utf-8")
-    print("[GATE] temp baseline saved: %s (%d entries)" % (temp_kit.temp_root(), len(_entries())))
+    print("[GATE] temp baseline saved: %%TEMP%%\\%s* (%d entries)"
+          % (temp_kit.APP_ID, len(_entries())))
 
 
 def check():
@@ -44,11 +50,12 @@ def check():
     after = _entries()
     new = sorted(set(after) - before)
     if new:
-        print("[ERROR] temp leak: %d new entr(y/ies) under %s:" % (len(new), temp_kit.temp_root()))
+        print("[ERROR] temp leak: %d new entr(y/ies) under %%TEMP%%\\%s*:"
+              % (len(new), temp_kit.APP_ID))
         for name in new:
             print("         %s" % name)
         return 1
-    print("[GATE] temp dir leak: 0 new entries under %s" % temp_kit.temp_root())
+    print("[GATE] temp dir leak: 0 new entries under %%TEMP%%\\%s*" % temp_kit.APP_ID)
     return 0
 
 
