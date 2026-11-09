@@ -27,15 +27,24 @@ BASELINE = Path(__file__).resolve().parents[1] / "build" / "temp-baseline.txt"
 def _entries():
     """扫 `%TEMP%\\<APP_ID>*`——**不只扫 `%TEMP%\\<APP_ID>\\`**。
 
-    旧形态的残留是**根级**的 `%TEMP%\\<APP_ID>-<随机>`（目录或文件），
-    只扫子目录会漏掉它们。按前缀扫 `%TEMP%` 根，两种形态都罩住。
+    旧形态的残留是**根级**的 `%TEMP%\\<APP_ID>-<随机>`（目录或文件），只扫子目录会漏掉。
+    但 `%TEMP%\\<APP_ID>` **目录本身**不是泄漏（它是本工具的临时根），要排除。
+    子目录内的条目加 `<APP_ID>/` 前缀，避免与根级旧形态同名混淆。
     """
     temp = Path(tempfile.gettempdir())
     prefix = temp_kit.APP_ID
+    out = set()
+    root = temp / prefix
     try:
-        return sorted(p.name for p in temp.iterdir() if p.name.startswith(prefix))
+        if root.is_dir():
+            for p in root.iterdir():
+                out.add("%s/%s" % (prefix, p.name))
+        for p in temp.iterdir():
+            if p.name.startswith(prefix) and p.name != prefix:
+                out.add(p.name)
     except OSError:
-        return []
+        pass
+    return sorted(out)
 
 
 def save():
