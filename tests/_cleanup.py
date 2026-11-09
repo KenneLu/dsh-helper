@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """测试临时目录清理：统一走模板标准件 ``temp_kit``。
 
-本仓原来自己实现的 `scratch_dir` / `rmtree_cleanup`（含 `H:/Tools/_verify-scratch/` 回落）
-已并入模板标准件 `temp_kit` v1.0.0：
+本仓原来自己实现的 `scratch_dir` / `rmtree_cleanup`（含 `H:/Tools/_verify-scratch/` 回落、
+自己的 `_LIVE`/`atexit`）已并入模板标准件 `temp_kit` v1.0.0+：
 
 * 路径：``%TEMP%\\<APP_ID>\\<场景>-<时间戳>-<6位随机>\\``（工具名即目录名，归属清晰）；
 * 四层清理：退出删 + 退出钩子 + 保留 N=3 + 年龄上限 24h。
@@ -21,6 +21,9 @@ if str(_SRC) not in sys.path:
 
 from template import temp_kit   # noqa: E402
 
+# 上提到模板的能力，薄封装直接转发（供既有测试 import 不变）
+from template.temp_kit import SWEPT, clear_readonly   # noqa: F401
+
 
 def harden_stdout():
     """让 `print` 在中文 Windows 控制台（GBK）上**永不因编码而崩**。
@@ -38,7 +41,6 @@ def harden_stdout():
             pass
 
 
-# 四个测试都 import 本模块；在这里统一生效，免得有人忘了调。
 harden_stdout()
 
 
