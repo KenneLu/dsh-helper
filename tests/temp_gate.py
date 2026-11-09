@@ -29,6 +29,7 @@ def _entries():
 
     旧形态的残留是**根级**的 `%TEMP%\\<APP_ID>-<随机>`（目录或文件），只扫子目录会漏掉。
     但 `%TEMP%\\<APP_ID>` **目录本身**不是泄漏（它是本工具的临时根），要排除。
+    **`<APP_ID>-update*` 是 update 暂存**（归 update_helper 管），**不算泄漏**，排除。
     子目录内的条目加 `<APP_ID>/` 前缀，避免与根级旧形态同名混淆。
     """
     temp = Path(tempfile.gettempdir())
@@ -38,9 +39,11 @@ def _entries():
     try:
         if root.is_dir():
             for p in root.iterdir():
+                if temp_kit.is_update_staging(p.name):
+                    continue
                 out.add("%s/%s" % (prefix, p.name))
         for p in temp.iterdir():
-            if p.name.startswith(prefix) and p.name != prefix:
+            if p.name != prefix and not temp_kit.is_update_staging(p.name) and p.name.startswith(prefix):
                 out.add(p.name)
     except OSError:
         pass

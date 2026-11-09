@@ -161,25 +161,30 @@ rem borrow now pins the shared modules, so the copy-drift/leak audit machine is 
 rem ---------------------------------------------------------------------------
 set "DSH_HELPER_DATA_DIR=%CD%\build\test-data"
 echo [TEST] tests suite ...
-rem 临时目录泄漏门禁（temp_kit）：跑测试前后扫 %TEMP%\dsh-helper\，本次新增 = 0。
-rem 判据只认「本次新增」——历史残留不算（那是存量清理的事）。
+rem 临时目录泄漏门禁（temp_kit）：跑测试前后扫 %TEMP%\dsh-helper*，本次新增 = 0。
+rem 判据只认「本次新增」——历史残留不算（那是存量清理的事）；update 暂存不算（归 update_helper）。
 "%PY%" tests\temp_gate.py --save
 if errorlevel 1 (
   echo [ERROR] temp baseline failed.
   if not defined NOPAUSE pause
   exit /b 1
 )
+rem 先跑完所有测试，再统一跑门禁——**测试失败也要检查泄漏**（否则失败路径直接退出，
+rem 泄漏证据就跟着失败一起被跳过；先记 TESTFAIL，门禁跑完再一起红）。
+set "TESTFAIL=0"
 for %%t in (tests\test_*.py) do (
   "%PY%" "%%t"
   if errorlevel 1 (
     echo [ERROR] test failed: %%t
-    if not defined NOPAUSE pause
-    exit /b 1
+    set "TESTFAIL=1"
   )
 )
 "%PY%" tests\temp_gate.py
 if errorlevel 1 (
   echo [ERROR] temp-dir leak: %TEMP%\%APPNAME%\ gained NEW entries during the tests.
+  set "TESTFAIL=1"
+)
+if not "%TESTFAIL%"=="0" (
   if not defined NOPAUSE pause
   exit /b 1
 )
