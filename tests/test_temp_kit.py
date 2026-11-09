@@ -40,7 +40,14 @@ if _root.is_dir():
 
 
 # ---- 用例 5：N=3 触发（建第 4 个时最旧的被删）----
-built = [temp_kit.scratch_dir("gate-test") for _ in range(5)]
+# 显式给每个目录递增的 mtime：同一秒建的目录 mtime 相同，sweep 的「最近 N 个」
+# 顺序会不确定（真实使用里目录相差数秒，不会有这个问题）。
+built = []
+for index in range(5):
+    path = temp_kit.scratch_dir("gate-test")
+    stamp = time.time() - (5 - index) * 10
+    os.utime(path, (stamp, stamp))
+    built.append(path)
 check("scratch_dir lands under %TEMP%/<APP_ID>/", built[0].parent == temp_kit.temp_root(),
       str(built[0]))
 check("scratch_dir name = <scene>-<ts>-<rand>",
