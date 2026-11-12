@@ -27,11 +27,11 @@ def main() -> int:
     temp = Path(tempfile.gettempdir())
     root = temp / kit.APP_ID
     leak = root / _LEAK_NAME
-    staging = temp / (kit.APP_ID + "-update-selfcheck")
     results = []
 
-    # 0) update 暂存**不误报**（标记文件识别）
+    # 0) update 暂存**不误报**（标记文件识别；暂存在工具目录内 —— 门禁收窄后只扫这里）
     kit.gate_save()
+    staging = root / (kit.APP_ID + "-update-selfcheck")
     staging.mkdir(parents=True, exist_ok=True)
     kit.mark_staging(staging)
     ok, new = kit.gate_check()

@@ -4,6 +4,7 @@
 离线运行：fake Icon 抛 PermissionError、fake ctypes 记录 MessageBoxW、无头入口不弹窗。
 """
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -76,10 +77,14 @@ with scratch("dsh-helper-crash-") as temp:
         blocker = root / "blocker"
         blocker.write_text("x", encoding="utf-8")
         main.LOG_DIR = blocker / "log"
-        none_path = main._write_startup_failure_log("boom-2")
-        check("unwritable crash-log dir -> None, no raise", none_path is None, none_path)
+        fallback = main._write_startup_failure_log("boom-2")
+        check("unwritable LOG_DIR -> crash log falls back to %TEMP%\\<APP_ID>\\crash\\",
+              fallback is not None and fallback.parent == main.temp_kit.temp_root() / "crash"
+              and "boom-2" in Path(fallback).read_text(encoding="utf-8"), fallback)
     finally:
         main.LOG_DIR = saved_dir
+        # 兜底落点（%TEMP%\<APP_ID>\crash\）由本次测试清理，避免留残留。
+        shutil.rmtree(main.temp_kit.temp_root() / "crash", ignore_errors=True)
 
 # ---------------- ③ MessageBoxW 兜底：失败不抛，无头入口不弹窗 ----------------
 class _FakeUser32:
