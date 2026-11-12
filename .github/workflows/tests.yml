@@ -39,19 +39,25 @@ jobs:
       # not touch the machine's real data root.
       # The failing file is named via an annotation, because step logs need sign-in while
       # run-page annotations are public text.
-      - name: Test suite (tests/test_*.py)
+      - name: Temp-dir gate self-check (temp_kit)
+        run: python tests/temp_gate_selfcheck.py
+
+      - name: Test suite + temp-dir leak gate (tests/test_*.py)
         shell: pwsh
         env:
           DSH_HELPER_DATA_DIR: ${{ github.workspace }}\build\test-data
         run: |
+          python tests/temp_gate.py --save
           $fail = @()
           Get-ChildItem tests/test_*.py | Sort-Object Name | ForEach-Object {
             Write-Host "== $($_.Name) =="
             python $_.FullName
             if ($LASTEXITCODE -ne 0) { $fail += $_.Name }
           }
+          python tests/temp_gate.py
+          if ($LASTEXITCODE -ne 0) { $fail += 'temp_gate' }
           if ($fail.Count -gt 0) {
-            Write-Host ("::error title=tests failed::" + ($fail -join '%0A'))
+            Write-Host ("::error title=tests/gate failed::" + ($fail -join '%0A'))
             exit 1
           }
 

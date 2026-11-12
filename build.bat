@@ -161,6 +161,14 @@ rem borrow now pins the shared modules, so the copy-drift/leak audit machine is 
 rem ---------------------------------------------------------------------------
 set "DSH_HELPER_DATA_DIR=%CD%\build\test-data"
 echo [TEST] tests suite ...
+rem 门禁自证（放最前）：自证内部会 gate_save 覆盖基线、且会建注入目录。
+rem 放测试前跑完并回滚——注入目录不污染基线，也不掩测试期的泄漏。
+"%PY%" tests\temp_gate_selfcheck.py
+if errorlevel 1 (
+  echo [ERROR] gate self-check failed.
+  if not defined NOPAUSE pause
+  exit /b 1
+)
 rem 临时目录泄漏门禁（temp_kit）：跑测试前后扫 %TEMP%\dsh-helper*，本次新增 = 0。
 rem 判据只认「本次新增」——历史残留不算（那是存量清理的事）；update 暂存不算（归 update_helper）。
 "%PY%" tests\temp_gate.py --save
