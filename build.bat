@@ -169,7 +169,7 @@ if errorlevel 1 (
   if not defined NOPAUSE pause
   exit /b 1
 )
-rem 临时目录泄漏门禁（temp_kit）：跑测试前后扫 %TEMP%\dsh-helper*，本次新增 = 0。
+rem 临时目录泄漏门禁（temp_kit）：跑测试前后扫 %TEMP%\dsh-helper\（收窄：只认工具目录本身），本次新增 = 0。
 rem 判据只认「本次新增」——历史残留不算（那是存量清理的事）；update 暂存不算（归 update_helper）。
 "%PY%" tests\temp_gate.py --save
 if errorlevel 1 (

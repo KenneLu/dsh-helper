@@ -28,11 +28,11 @@ from template import temp_kit   # noqa: E402
 def main() -> int:
     if "--save" in sys.argv:
         count = temp_kit.gate_save()
-        print("[GATE] temp baseline saved: %%TEMP%%\\%s* (%d entries)" % (temp_kit.APP_ID, count))
+        print("[GATE] temp baseline saved: %%TEMP%%\\%s\\ (%d entries)" % (temp_kit.APP_ID, count))
         return 0
     ok, new = temp_kit.gate_check()
     if not ok:
-        print("[ERROR] temp leak: %d new entr(y/ies) under %%TEMP%%\\%s*:"
+        print("[ERROR] temp leak: %d new entr(y/ies) under %%TEMP%%\\%s\\:"
               % (len(new), temp_kit.APP_ID))
         for name in new:
             print("         %s" % name)
