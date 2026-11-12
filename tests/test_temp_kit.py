@@ -114,6 +114,24 @@ check("crash log content readable (rotated-out files are gone)",
       all("boom-" in w.read_text(encoding="utf-8") for w in written[-3:])
       and not written[0].exists(), "")
 
+# ---- 崩溃日志兜底：首选不可写 → %TEMP%\<APP_ID>\crash\ + 警告；兜底目录不被 sweep 删 ----
+# 用「父路径是普通文件」的目录触发首选写失败（mkdir 必失败，OSError）。
+_blocker = temp_kit.temp_root() / "gate-blocker"
+_blocker.write_text("x", encoding="utf-8")
+_warns = []
+_fallback = temp_kit.write_crash_log(
+    "gate-fallback", "boom-fallback", directory=_blocker / "logs", warn=_warns.append)
+check("unwritable preferred dir -> falls back to %TEMP%\\<APP_ID>\\crash\\",
+      _fallback is not None and _fallback.parent == temp_kit.temp_root() / "crash",
+      str(_fallback))
+check("fallback prints a warning (silent fallback is as good as none)",
+      any("用户数据区不可写" in w for w in _warns), _warns)
+# 兜底目录**显式排除在 sweep 之外**：把它的 mtime 造到 3 天前（超过 24h），sweep 也不删。
+os.utime(_fallback.parent, (ancient, ancient))
+temp_kit.sweep(keep=0, max_age=24 * 60 * 60)
+check("fallback dir is NOT swept (evidence must survive)",
+      _fallback.parent.is_dir() and _fallback.exists(), str(_fallback.parent))
+
 # ---- 清理 ----
 for p in list(temp_kit.temp_root().iterdir()):
     if p.is_dir():

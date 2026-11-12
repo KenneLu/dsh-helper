@@ -62,7 +62,7 @@ try:
 finally:
     main.LOG_INIT_ERROR = saved_log_error
 
-# ---------------- ② 崩溃日志：LOG_DIR/crash/ 一件一文件，写不了返回 None ----------------
+# ---------------- ② 崩溃日志：首选 LOG_DIR/crash/ 一件一文件；不可写时兜底 %TEMP%\<APP_ID>\crash\ ----------------
 with scratch("dsh-helper-crash-") as temp:
     root = Path(temp)
     saved_dir = main.LOG_DIR

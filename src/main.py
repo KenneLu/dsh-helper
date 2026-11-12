@@ -2510,8 +2510,9 @@ def _startup_failure_text(exc, detail) -> str:
 def _write_startup_failure_log(text):
     """写崩溃日志：``<LOG_DIR>\\crash\\startup-<时间戳>-<随机>.log``（一件一文件，保留 10 份）。
 
-    走模板标准件 temp_kit：**不放临时目录**（会被清理，证据会丢）、**不用 %TEMP% 兜底**
-    （%TEMP% 语义是可随时删，与"保留证据"矛盾）。写失败绝不拦住退出。
+    走模板标准件 temp_kit：首选 ``<LOG_DIR>\\crash\\``；**首选不可写时**（沙箱 / 受限终端 /
+    只读安装位）兜底到 ``%TEMP%\\<APP_ID>\\crash\\``（工具目录下，**不是** ``%TEMP%`` 根），
+    并**打印警告**。兜底目录**显式排除在 sweep 之外**（证据不能删）。写失败绝不拦住退出。
     """
     try:
         return temp_kit.write_crash_log("startup", text, directory=LOG_DIR / "crash")
