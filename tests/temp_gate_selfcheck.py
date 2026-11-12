@@ -5,6 +5,7 @@
 
 四拍：
 0. **update 暂存不误报**：放一个打了标记的暂存目录，check 应为 0；
+0b. **崩溃日志兜底目录不误报**：放一个 ``crash`` 目录，check 应为 0（证据不是泄漏）；
 1. **基线绿**：``gate_save`` 后记基线，再 check 应为 0（没漏）；
 2. **注入红**：往 ``%TEMP%\\<APP_ID>\\`` 塞一个标准命名的目录，check 必须为 1（能报红）；
 3. **回滚绿**：删掉注入的目录，check 必须回到 0（能报绿）。
@@ -37,6 +38,14 @@ def main() -> int:
     ok, new = kit.gate_check()
     results.append(("update staging not flagged (expect 0)", ok, ok and not new))
     shutil.rmtree(staging, ignore_errors=True)
+
+    # 0b) 崩溃日志兜底目录（crash）**不误报**——它是证据，sweep 也显式豁免；
+    #     门禁若报红，就出现「证据被当成泄漏」的悖论。
+    crash = root / kit.CRASH_DIR_NAME
+    crash.mkdir(parents=True, exist_ok=True)
+    ok, new = kit.gate_check()
+    results.append(("crash fallback dir not flagged (expect 0)", ok, ok and not new))
+    shutil.rmtree(crash, ignore_errors=True)
 
     # 1) 基线绿
     kit.gate_save()
