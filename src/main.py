@@ -252,6 +252,9 @@ STATE = {
     "last_output": [],
 }
 MANAGED_PROCESS = None
+# dsh 输出日志的父端文件对象（stdout 重定向目标）。持有引用防 GC；helper 退出时
+# 随之关闭，但 dsh 已继承自己的句柄，写文件不受影响。
+_DSH_OUTPUT_FILE = None
 TRAY_ICON = None
 
 
@@ -776,14 +779,91 @@ def append_output(line):
             STATE["url"] = url
 
 
-def read_process_output(proc):
+def dsh_output_log_path():
+    """dsh 子进程的 stdout/stderr 重定向目标（日志文件）。
+
+    **必须用文件，不能用 PIPE**：helper 一退出，管道读端立即关闭，dsh
+    （dsh.cmd → node.exe）下次写 stdout 就收到 ERROR_BROKEN_PIPE → Node
+    抛未处理的 EPIPE 直接崩（ws-mcp 每 30 秒写重连失败日志必然触发）。
+    写文件则 dsh 持有自己的文件句柄，与 helper 生死无关。
+    """
+    return LOG_DIR / "dsh-output.log"
+
+
+def prepare_dsh_output_log(path):
+    """打开（并视情况清空）dsh 输出日志，返回可传给 Popen 的文件对象。
+
+    保留历史日志作为证据（tail 只读新增部分，不会污染 last_output），
+    但超过 8MB 时清空，避免 dsh 长期写（ws-mcp 重连失败每 30 秒一条）无限增长。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        if proc.stdout is None:
-            return
-        for line in proc.stdout:
-            append_output(line)
+        if path.exists() and path.stat().st_size > 8 * 1024 * 1024:
+            path.write_text("", encoding="utf-8")
+            log(f"dsh output log trimmed (>8MB): {path}")
+    except OSError as exc:
+        log(f"dsh output log trim failed: {exc}")
+    return open(path, "a", encoding="utf-8", errors="replace")
+
+
+def spawn_managed_dsh(command):
+    """启动 dsh，返回 ``(proc, log_path)``。
+
+    stdout/stderr 重定向到日志文件（**不用 PIPE**）：helper 一退出，管道读端
+    立即关闭，dsh（dsh.cmd → node.exe）下次写 stdout 就收到 ERROR_BROKEN_PIPE
+    → Node 抛未处理的 EPIPE 直接崩（ws-mcp 每 30 秒写重连失败日志必然触发）。
+    写文件则 dsh 持有自己的文件句柄，与 helper 生死无关。
+    """
+    global _DSH_OUTPUT_FILE
+    log_path = dsh_output_log_path()
+    out_file = prepare_dsh_output_log(log_path)
+    try:
+        proc = subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=out_file,
+            stderr=subprocess.STDOUT,
+            creationflags=CREATE_NO_WINDOW,
+            cwd=str(Path.home()),
+        )
+    except BaseException:
+        # Popen 失败：父端文件对象没人继承了，自己关掉（不能把 out_file 泄漏给调用方）。
+        try:
+            out_file.close()
+        except Exception:
+            pass
+        raise
+    # 持有文件对象引用：Popen 也会存，但显式持有更稳（防 GC 提前关掉父端句柄）。
+    _DSH_OUTPUT_FILE = out_file
+    return proc, log_path
+
+
+def tail_process_output(log_path, proc):
+    """tail dsh 的输出日志文件，把新增行喂给 append_output。
+
+    从**文件末尾**开始读：历史日志不污染 last_output，文件里仍保留完整证据。
+    dsh 退出（EOF 且进程已不在）后收尾，把最后半行也吃掉。
+    """
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as fh:
+            fh.seek(0, os.SEEK_END)
+            pending = ""
+            while True:
+                chunk = fh.read()
+                if chunk:
+                    pending += chunk
+                    lines = pending.split("\n")
+                    pending = lines.pop()
+                    for line in lines:
+                        append_output(line)
+                    continue
+                if proc.poll() is not None:
+                    if pending:
+                        append_output(pending)
+                    break
+                time.sleep(0.25)
     except Exception as exc:
-        log(f"dsh output reader failed: {exc}")
+        log(f"dsh output tail failed: {exc}")
 
 
 class DshCommandError(RuntimeError):
@@ -1059,18 +1139,7 @@ def start_impl():
         notify(LAUNCH_PORT_NOTE)
     log("start: " + " ".join(command))
     try:
-        proc = subprocess.Popen(
-            command,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            bufsize=1,
-            creationflags=CREATE_NO_WINDOW,
-            cwd=str(Path.home()),
-        )
+        proc, log_path = spawn_managed_dsh(command)
     except OSError as exc:
         message = i18n.t("notify_start_failed", exc)
         log(message)
@@ -1086,7 +1155,7 @@ def start_impl():
 
     MANAGED_PROCESS = proc
     set_state(pid=proc.pid, managed=True)
-    threading.Thread(target=read_process_output, args=(proc,), daemon=True).start()
+    threading.Thread(target=tail_process_output, args=(log_path, proc), daemon=True).start()
 
     deadline = time.monotonic() + 35
     while time.monotonic() < deadline:
